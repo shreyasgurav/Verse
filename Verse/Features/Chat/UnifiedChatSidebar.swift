@@ -40,10 +40,6 @@ struct UnifiedChatSidebar: View {
         VStack(spacing: 0) {
             // Minimal Header
             HStack {
-                Text("Assistant")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-                
                 Spacer()
                 
                 // Agent status indicator
@@ -71,34 +67,13 @@ struct UnifiedChatSidebar: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             
-            Divider()
-            
             // Messages Area
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 6) {
                         if messages.isEmpty {
-                            // Welcome message
-                            VStack(spacing: 12) {
-                                Text(viewModel.configurationService.isAPIKeyConfigured ? "How can I help?" : "Setup Required")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.primary)
-                                
-                                if !viewModel.configurationService.isAPIKeyConfigured {
-                                    Button("Add API Key") {
-                                        showingAPIKeyPrompt = true
-                                    }
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.accentColor)
-                                } else {
-                                    Text("I can chat, search, browse, and perform tasks for you")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 20)
-                                }
-                            }
-                            .padding(.top, 32)
+                            // Empty state - no welcome message
+                            EmptyView()
                         } else {
                             ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
                                 UnifiedMessageView(
@@ -127,60 +102,45 @@ struct UnifiedChatSidebar: View {
                 }
             }
             
-            Divider()
-            
-            // Input Area with Stop Button
-            VStack(spacing: 8) {
-                // Stop button (shown when generating)
-                if isGenerating || agent?.isActive == true {
-                    Button(action: stopGeneration) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "stop.circle.fill")
-                                .font(.system(size: 12))
-                            Text("Stop")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.red.opacity(0.1))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .transition(.scale.combined(with: .opacity))
-                }
-                
-                HStack(spacing: 10) {
-                    TextField("Ask me anything or give me a task...", text: $currentMessage, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(isInputFocused ? Color.accentColor.opacity(0.4) : Color.secondary.opacity(0.2), lineWidth: 0.5)
-                                )
-                        )
-                        .focused($isInputFocused)
-                        .lineLimit(1...5)
-                        .disabled(isGenerating || agent?.isActive == true)
-                        .onSubmit {
+            // Input Area
+            HStack(spacing: 10) {
+                TextField("Type your message...", text: $currentMessage, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(NSColor.windowBackgroundColor).opacity(0.8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.secondary.opacity(isInputFocused ? 0.6 : 0.3), lineWidth: 0.5)
+                            )
+                    )
+                    .focused($isInputFocused)
+                    .lineLimit(1...5)
+                    .disabled(isGenerating || agent?.isActive == true)
+                    .onSubmit {
+                        if isGenerating || agent?.isActive == true {
+                            stopGeneration()
+                        } else {
                             sendMessage()
                         }
-                    
-                    Button(action: sendMessage) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(currentMessage.isEmpty ? .secondary : .accentColor)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(currentMessage.isEmpty || isGenerating || agent?.isActive == true)
+                
+                Button(action: {
+                    if isGenerating || agent?.isActive == true {
+                        stopGeneration()
+                    } else {
+                        sendMessage()
+                    }
+                }) {
+                    Image(systemName: (isGenerating || agent?.isActive == true) ? "stop.circle.fill" : "arrow.up.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor((isGenerating || agent?.isActive == true) ? .red : (currentMessage.isEmpty ? .secondary : .accentColor))
                 }
+                .buttonStyle(.plain)
+                .disabled(currentMessage.isEmpty && !isGenerating && agent?.isActive != true)
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -189,7 +149,7 @@ struct UnifiedChatSidebar: View {
             .animation(.easeInOut(duration: 0.2), value: agent?.isActive)
         }
         .frame(width: 320)
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(Color(NSColor.controlBackgroundColor))
         .sheet(isPresented: $showingAPIKeyPrompt) {
             APIKeyConfigurationView(viewModel: viewModel)
         }
@@ -443,7 +403,7 @@ struct UnifiedMessageView: View {
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(NSColor.controlBackgroundColor).opacity(0.4))
+                        .fill(Color(NSColor.windowBackgroundColor).opacity(0.6))
                 )
                 
                 Spacer(minLength: 40)
@@ -486,7 +446,7 @@ struct TypingIndicatorView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(NSColor.controlBackgroundColor).opacity(0.4))
+                    .fill(Color(NSColor.windowBackgroundColor).opacity(0.6))
             )
             
             Spacer()

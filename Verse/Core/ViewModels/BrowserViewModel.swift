@@ -20,6 +20,7 @@ class BrowserViewModel: NSObject, ObservableObject {
     @Published var canGoForward: Bool = false
     @Published var estimatedProgress: Double = 0.0
     @Published var pageTitle: String = "Arc Browser"
+    @Published var isFullscreen: Bool = false
     
     // Global services
     @Published var chatGPTService: ChatGPTService?
@@ -239,6 +240,32 @@ class BrowserViewModel: NSObject, ObservableObject {
         loadURL("https://www.google.com")
     }
     
+    // Fullscreen functionality
+    func toggleFullscreen() {
+        isFullscreen.toggle()
+        print("🖥️ Fullscreen toggled: \(isFullscreen ? "ON" : "OFF")")
+    }
+    
+    func exitFullscreen() {
+        isFullscreen = false
+        print("🎥 Exiting video fullscreen")
+        
+        // Also tell the web page to exit fullscreen
+        if let webView = getCurrentWebView() {
+            webView.evaluateJavaScript("document.exitFullscreen && document.exitFullscreen()") { _, error in
+                if let error = error {
+                    print("Error exiting fullscreen: \(error)")
+                }
+            }
+        }
+    }
+    
+    private func getCurrentWebView() -> WKWebView? {
+        // This is a simplified way to get the current web view
+        // In a real implementation, you'd need to track which web view is currently active
+        return nil
+    }
+    
     // Per-tab AI Sidebar
     func toggleAISidebar() {
         guard let selectedTabId = selectedTabId else { return }
@@ -377,12 +404,39 @@ extension BrowserViewModel: WKNavigationDelegate, WKUIDelegate {
         return nil
     }
     
+    // Handle fullscreen requests from websites (like YouTube)
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
         completionHandler()
     }
     
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
         completionHandler(true)
+    }
+    
+    // Handle fullscreen video requests
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+        completionHandler(defaultText)
+    }
+    
+    // Handle fullscreen API requests from websites
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        decisionHandler(.grant)
+    }
+    
+    
+    // Handle fullscreen API requests
+    func webView(_ webView: WKWebView, didEnterFullscreenWithPlaceholderView placeholderView: NSView) {
+        print("🖥️ WebView entered fullscreen")
+        DispatchQueue.main.async {
+            self.isFullscreen = true
+        }
+    }
+    
+    func webView(_ webView: WKWebView, didExitFullscreenWithPlaceholderView placeholderView: NSView) {
+        print("🖥️ WebView exited fullscreen")
+        DispatchQueue.main.async {
+            self.isFullscreen = false
+        }
     }
 }
 

@@ -13,6 +13,7 @@ struct VerseApp: App {
         WindowGroup {
             BrowserView()
                 .frame(minWidth: 800, minHeight: 600)
+                .preferredColorScheme(.dark)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
