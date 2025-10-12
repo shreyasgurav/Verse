@@ -6,6 +6,8 @@ struct ContentView: View {
     @State private var isElectronRunning = false
     @State private var showLaunchButton = true
     @State private var debugOutput = ""
+    @State private var customPath = "/Users/shreyasgurav/Desktop/Verse"
+    @State private var showCustomPathInput = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -41,6 +43,11 @@ struct ContentView: View {
                     
                     Button(action: debugPaths) {
                         Text("Debug Paths")
+                    }
+                    .padding()
+                    
+                    Button(action: { showCustomPathInput = true }) {
+                        Text("Set Custom Path")
                     }
                     .padding()
                     
@@ -101,6 +108,29 @@ struct ContentView: View {
         .onDisappear {
             stopElectronBrowser()
         }
+        .sheet(isPresented: $showCustomPathInput) {
+            VStack(spacing: 20) {
+                Text("Set Custom Project Path")
+                    .font(.headline)
+                
+                TextField("Project Path", text: $customPath)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                
+                HStack {
+                    Button("Cancel") {
+                        showCustomPathInput = false
+                    }
+                    
+                    Button("Save") {
+                        customPath = customPath.trimmingCharacters(in: .whitespacesAndNewlines)
+                        showCustomPathInput = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding()
+            .frame(width: 400, height: 200)
+        }
     }
     
     private func launchElectronBrowser() {
@@ -114,11 +144,16 @@ struct ContentView: View {
         
         // Try to find the project root by going up from the bundle path
         let possibleProjectRoots = [
+            customPath,  // User-defined custom path first
             bundlePath.replacingOccurrences(of: "/Build/Products/Debug/Verse.app", with: ""),
             bundlePath.replacingOccurrences(of: "/DerivedData/Verse-*/Build/Products/Debug/Verse.app", with: ""),
             bundlePath.replacingOccurrences(of: "/Verses.app/Contents/MacOS", with: ""),
             bundlePath.replacingOccurrences(of: "/Contents/MacOS", with: ""),
-            FileManager.default.currentDirectoryPath
+            FileManager.default.currentDirectoryPath,
+            "/Users/shreyasgurav/Desktop/Verse",  // Hardcoded fallback for development
+            bundlePath.replacingOccurrences(of: "/src/macos-app/App/Verse.app", with: ""),
+            bundlePath.replacingOccurrences(of: "/src/macos-app/Verse.app", with: ""),
+            bundlePath.replacingOccurrences(of: "/Verse.app", with: "")
         ]
         
         var projectRoot: String?
@@ -132,11 +167,26 @@ struct ContentView: View {
         
         guard let root = projectRoot else {
             print("Could not find project root with package.json")
-            showLaunchButton = true
-            return
+            print("Bundle path: \(bundlePath)")
+            print("Current directory: \(FileManager.default.currentDirectoryPath)")
+            
+            // Try hardcoded fallback
+            let fallbackRoot = customPath
+            let fallbackPackageJson = "\(fallbackRoot)/package.json"
+            if FileManager.default.fileExists(atPath: fallbackPackageJson) {
+                print("Using custom path fallback: \(fallbackRoot)")
+                projectRoot = fallbackRoot
+            } else {
+                print("All fallbacks failed")
+                print("Please use 'Set Custom Path' to specify the correct project location")
+                showLaunchButton = true
+                return
+            }
         }
         
-        print("Project root: \(root)")
+        let finalRoot = projectRoot ?? customPath
+        
+        print("Project root: \(finalRoot)")
         
         let task = Process()
         
@@ -169,13 +219,13 @@ struct ContentView: View {
         // Use npm start if we found npm, otherwise use node directly
         if execPath.contains("npm") {
             task.arguments = ["start"]
-            task.currentDirectoryURL = URL(fileURLWithPath: root)
+            task.currentDirectoryURL = URL(fileURLWithPath: finalRoot)
         } else {
             // Fallback: try to run electron directly
-            let electronPath = "\(root)/node_modules/.bin/electron"
+            let electronPath = "\(finalRoot)/node_modules/.bin/electron"
             if FileManager.default.fileExists(atPath: electronPath) {
                 task.arguments = [electronPath, "."]
-                task.currentDirectoryURL = URL(fileURLWithPath: root)
+                task.currentDirectoryURL = URL(fileURLWithPath: finalRoot)
             } else {
                 print("Could not find electron executable at \(electronPath)")
                 showLaunchButton = true
@@ -199,7 +249,7 @@ struct ContentView: View {
             print("Launching Electron with:")
             print("  Executable: \(execPath)")
             print("  Arguments: \(task.arguments ?? [])")
-            print("  Working Directory: \(root)")
+            print("  Working Directory: \(finalRoot)")
             
             try task.run()
             electronProcess = task
@@ -254,12 +304,16 @@ struct ContentView: View {
         
         // Test possible project roots
         let possibleProjectRoots = [
+            customPath,  // User-defined custom path first
             bundlePath.replacingOccurrences(of: "/Build/Products/Debug/Verse.app", with: ""),
             bundlePath.replacingOccurrences(of: "/DerivedData/Verse-*/Build/Products/Debug/Verse.app", with: ""),
             bundlePath.replacingOccurrences(of: "/Verses.app/Contents/MacOS", with: ""),
             bundlePath.replacingOccurrences(of: "/Contents/MacOS", with: ""),
             FileManager.default.currentDirectoryPath,
-            "/Users/shreyasgurav/Desktop/Verse"  // Hardcoded fallback
+            "/Users/shreyasgurav/Desktop/Verse",  // Hardcoded fallback for development
+            bundlePath.replacingOccurrences(of: "/src/macos-app/App/Verse.app", with: ""),
+            bundlePath.replacingOccurrences(of: "/src/macos-app/Verse.app", with: ""),
+            bundlePath.replacingOccurrences(of: "/Verse.app", with: "")
         ]
         
         for (index, possibleRoot) in possibleProjectRoots.enumerated() {
