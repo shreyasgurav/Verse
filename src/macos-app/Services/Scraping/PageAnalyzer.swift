@@ -38,7 +38,12 @@ class PageAnalyzer {
                     '[type="submit"]',
                     '.btn',
                     '.button',
-                    '.clickable'
+                    '.clickable',
+                    '[data-testid*="search"]',
+                    '[id*="search"]',
+                    '[class*="search"]',
+                    '[aria-label*="search"]',
+                    '[placeholder*="search"]'
                 ];
                 
                 const allElements = document.querySelectorAll(selectors.join(', '));
@@ -91,15 +96,16 @@ class PageAnalyzer {
                     }
                     
                     if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-                        const combinedContext = (element.placeholder + ' ' + element.getAttribute('aria-label') || '').toLowerCase();
+                        const combinedContext = (element.placeholder + ' ' + element.getAttribute('aria-label') + ' ' + element.id + ' ' + element.className || '').toLowerCase();
                         
-                        if (combinedContext.includes('email')) return 'email';
+                        if (combinedContext.includes('search')) return 'search';
+                        else if (combinedContext.includes('email')) return 'email';
                         else if (combinedContext.includes('password')) return 'password';
                         else if (combinedContext.includes('name')) return 'name';
                         else if (combinedContext.includes('phone')) return 'phone';
-                        else if (combinedContext.includes('search')) return 'search';
                         else if (combinedContext.includes('question')) return 'question';
                         else if (combinedContext.includes('title')) return 'title';
+                        else if (element.type === 'search') return 'search';
                         else return element.type || 'text';
                     }
                     

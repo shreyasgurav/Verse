@@ -126,11 +126,37 @@ class AgenticBrowser {
 
     async clickElement(selector) {
         try {
-            await this.page.waitForSelector(selector, { timeout: 5000 });
-            await this.page.click(selector);
-            this.automationHistory.push({ action: 'click', selector: selector, timestamp: new Date() });
+            // Enhanced element finding - try multiple strategies
+            let element = null;
             
-            return { success: true, selector: selector };
+            // Strategy 1: Direct selector
+            try {
+                await this.page.waitForSelector(selector, { timeout: 2000 });
+                element = await this.page.$(selector);
+            } catch (e) {
+                // Strategy 2: Find by text content
+                element = await this.page.evaluateHandle((targetText) => {
+                    const elements = document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]');
+                    for (let el of elements) {
+                        const text = (el.textContent || '').trim().toLowerCase();
+                        const ariaLabel = (el.getAttribute('aria-label') || '').trim().toLowerCase();
+                        if (text.includes(targetText.toLowerCase()) || ariaLabel.includes(targetText.toLowerCase())) {
+                            return el;
+                        }
+                    }
+                    return null;
+                }, selector);
+            }
+            
+            if (element && element.asElement()) {
+                // Scroll element into view and click
+                await element.asElement().scrollIntoViewIfNeeded();
+                await element.asElement().click();
+                this.automationHistory.push({ action: 'click', selector: selector, timestamp: new Date() });
+                return { success: true, selector: selector };
+            } else {
+                throw new Error(`Element not found: ${selector}`);
+            }
         } catch (error) {
             console.error('Click error:', error);
             return { success: false, error: error.message };
@@ -139,13 +165,91 @@ class AgenticBrowser {
 
     async typeText(selector, text) {
         try {
-            await this.page.waitForSelector(selector, { timeout: 5000 });
-            await this.page.fill(selector, text);
-            this.automationHistory.push({ action: 'type', selector: selector, text: text, timestamp: new Date() });
+            // Enhanced element finding for input fields
+            let element = null;
             
-            return { success: true, selector: selector, text: text };
+            // Strategy 1: Direct selector
+            try {
+                await this.page.waitForSelector(selector, { timeout: 2000 });
+                element = await this.page.$(selector);
+            } catch (e) {
+                // Strategy 2: Find by placeholder, aria-label, or context
+                element = await this.page.evaluateHandle((targetText) => {
+                    const elements = document.querySelectorAll('input, textarea, [contenteditable="true"], [role="textbox"]');
+                    for (let el of elements) {
+                        const placeholder = (el.placeholder || '').trim().toLowerCase();
+                        const ariaLabel = (el.getAttribute('aria-label') || '').trim().toLowerCase();
+                        const name = (el.name || '').trim().toLowerCase();
+                        const id = (el.id || '').trim().toLowerCase();
+                        const target = targetText.toLowerCase();
+                        
+                        if (placeholder.includes(target) || ariaLabel.includes(target) || 
+                            name.includes(target) || id.includes(target)) {
+                            return el;
+                        }
+                    }
+                    return null;
+                }, selector);
+            }
+            
+            if (element && element.asElement()) {
+                // Focus, clear, and type
+                await element.asElement().focus();
+                await element.asElement().fill('');
+                await element.asElement().type(text);
+                this.automationHistory.push({ action: 'type', selector: selector, text: text, timestamp: new Date() });
+                return { success: true, selector: selector, text: text };
+            } else {
+                throw new Error(`Input element not found: ${selector}`);
+            }
         } catch (error) {
             console.error('Type error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async typeAndEnter(selector, text) {
+        try {
+            // Enhanced element finding for input fields
+            let element = null;
+            
+            // Strategy 1: Direct selector
+            try {
+                await this.page.waitForSelector(selector, { timeout: 2000 });
+                element = await this.page.$(selector);
+            } catch (e) {
+                // Strategy 2: Find by placeholder, aria-label, or context
+                element = await this.page.evaluateHandle((targetText) => {
+                    const elements = document.querySelectorAll('input, textarea, [contenteditable="true"], [role="textbox"]');
+                    for (let el of elements) {
+                        const placeholder = (el.placeholder || '').trim().toLowerCase();
+                        const ariaLabel = (el.getAttribute('aria-label') || '').trim().toLowerCase();
+                        const name = (el.name || '').trim().toLowerCase();
+                        const id = (el.id || '').trim().toLowerCase();
+                        const target = targetText.toLowerCase();
+                        
+                        if (placeholder.includes(target) || ariaLabel.includes(target) || 
+                            name.includes(target) || id.includes(target)) {
+                            return el;
+                        }
+                    }
+                    return null;
+                }, selector);
+            }
+            
+            if (element && element.asElement()) {
+                // Focus, clear, type, and press Enter
+                await element.asElement().focus();
+                await element.asElement().fill('');
+                await element.asElement().type(text);
+                await element.asElement().press('Enter');
+                this.automationHistory.push({ action: 'type_enter', selector: selector, text: text, timestamp: new Date() });
+                return { success: true, selector: selector, text: text };
+            } else {
+                throw new Error(`Input element not found: ${selector}`);
+            }
+        } catch (error) {
+            console.error('Type+Enter error:', error);
             return { success: false, error: error.message };
         }
     }
@@ -205,7 +309,13 @@ class AgenticBrowser {
             const currentContent = await this.extractPageContent();
             
             const prompt = `
-            You are an AI web automation agent. Plan the steps to accomplish this goal: "${goal}"
+            You are an advanced AI web automation agent with enhanced reasoning capabilities. Plan the steps to accomplish this goal: "${goal}"
+            
+            **CHAIN OF THOUGHT PROCESS:**
+            1. Analyze the current page context and available elements
+            2. Identify what needs to be done next to achieve the goal
+            3. Select the most appropriate element and action
+            4. Consider the sequence of actions needed
             
             Current page context:
             - Title: ${currentContent.content?.title || 'Unknown'}
@@ -214,17 +324,30 @@ class AgenticBrowser {
             - Available inputs: ${JSON.stringify(currentContent.content?.inputs || [])}
             - Available links: ${JSON.stringify(currentContent.content?.links?.slice(0, 10) || [])}
             
+            **ENHANCED REASONING RULES:**
+            - For Amazon searches: Look for search input fields and search buttons
+            - For e-commerce: Identify product listings, prices, and relevant filters
+            - For forms: Find input fields by placeholder, aria-label, or context
+            - For navigation: Use specific element text or attributes, not generic selectors
+            - Always analyze what the current page offers before deciding next action
+            
+            **ELEMENT SELECTION STRATEGY:**
+            - For search: Look for elements with inputContext='search' or placeholder containing 'search'
+            - For buttons: Use exact button text or aria-label
+            - For links: Use link text or href context
+            - Always prefer specific element identification over generic selectors
+            
             Provide a JSON array of steps in this format:
             [
                 {
-                    "action": "navigate|click|type|scroll|wait",
-                    "target": "selector or URL",
+                    "action": "navigate|click|type|type_enter|scroll|wait",
+                    "target": "specific element identifier - text, placeholder, or context",
                     "value": "text to type or scroll amount",
-                    "reasoning": "why this step is needed"
+                    "reasoning": "detailed step-by-step reasoning including current situation analysis, next objective, element selection rationale, and action justification"
                 }
             ]
             
-            Be specific with CSS selectors and provide clear reasoning for each step.
+            Be specific with element identification and provide detailed reasoning for each step.
             `;
 
             const response = await this.openai.chat.completions.create({
@@ -270,9 +393,12 @@ class AgenticBrowser {
                     case 'click':
                         result = await this.clickElement(step.target);
                         break;
-                    case 'type':
-                        result = await this.typeText(step.target, step.value);
-                        break;
+            case 'type':
+                result = await this.typeText(step.target, step.value);
+                break;
+            case 'type_enter':
+                result = await this.typeAndEnter(step.target, step.value);
+                break;
                     case 'scroll':
                         result = await this.scrollPage(step.value > 0 ? 'down' : 'up', Math.abs(step.value));
                         break;

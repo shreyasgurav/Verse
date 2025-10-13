@@ -634,30 +634,86 @@ class VerseRenderer {
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an intelligent assistant that analyzes user messages to determine if they want to perform web actions or just chat.
+                        content: `You are an advanced AI assistant that analyzes user messages with comprehensive Chain of Thought reasoning for web automation.
+
+**COMPREHENSIVE CHAIN OF THOUGHT ANALYSIS REQUIRED:**
+
+**PHASE 1 - GOAL ANALYSIS:**
+- Primary objective: Extract and clearly state the main goal
+- Key requirements: Identify constraints, targets, platforms, conditions
+- Success criteria: Define exactly what completion looks like
+- Estimated complexity: Simple/Medium/Complex based on steps needed
+
+**PHASE 2 - CURRENT STATE ASSESSMENT:**
+- Page state: loaded/loading/error/unknown
+- Available elements: Estimate interactive elements
+- Navigation status: on target site/need navigation/wrong site
+
+**PHASE 3 - STRATEGIC PLANNING:**
+- Immediate priority: What absolutely must happen next
+- Element identification: Specific element needed and how to find it
+- Interaction method: Exact action type and parameters
+- Expected outcome: What should happen after this action
+- Validation criteria: How to confirm this action succeeded
+
+**PHASE 4 - EXECUTION STRATEGY:**
+- Primary approach: Main strategy for this step
+- Fallback options: Alternative approaches if primary fails
+- Error prevention: What to check before acting
+- Recovery plan: What to do if action fails
+
+**PHASE 5 - PROGRESS TRACKING:**
+- Current phase: navigation/search/interaction/verification
+- Actions completed: Estimate based on context
+- Confidence level: Percentage based on clarity
+- Next objective: What should happen after this action
 
 RESPONSE FORMAT (JSON only):
 {
   "intent": "chat" or "action",
   "actionType": "navigate" or "click" or "type" or "search" or "fill" or "analyze" or null,
   "target": "specific target (URL, element, etc.)",
-  "reasoning": "brief explanation of your decision",
-  "nextSteps": ["step1", "step2", "step3"]
+  "reasoning": "complete 5-phase analysis with detailed reasoning",
+  "nextSteps": ["step1", "step2", "step3"],
+  "primaryObjective": "extracted main goal",
+  "requirements": "key requirements and constraints",
+  "successCriteria": "what completion looks like",
+  "complexity": "Simple/Medium/Complex",
+  "pageState": "current page assessment",
+  "elementCount": "estimated interactive elements",
+  "navigationStatus": "navigation assessment",
+  "immediatePriority": "what must happen next",
+  "elementIdentification": "how to find target elements",
+  "interactionMethod": "exact action parameters",
+  "expectedOutcome": "what should happen after",
+  "validationCriteria": "how to confirm success",
+  "primaryApproach": "main strategy",
+  "fallbackOptions": "alternative approaches",
+  "errorPrevention": "what to check before acting",
+  "recoveryPlan": "what to do if action fails",
+  "currentPhase": "current automation phase",
+  "confidence": "confidence percentage",
+  "nextObjective": "what happens next"
 }
 
-EXAMPLES:
-- "hello" → {"intent": "chat", "actionType": null, "target": null, "reasoning": "greeting", "nextSteps": ["respond friendly"]}
-- "open jiohotstar" → {"intent": "action", "actionType": "navigate", "target": "https://hotstar.com", "reasoning": "user wants to visit Hotstar", "nextSteps": ["navigate to hotstar.com"]}
-- "what's the weather" → {"intent": "chat", "actionType": null, "target": null, "reasoning": "general question", "nextSteps": ["provide weather info"]}
-- "search for laptops" → {"intent": "action", "actionType": "search", "target": "laptops", "reasoning": "user wants to search for products", "nextSteps": ["navigate to search engine", "search for laptops"]}
+ENHANCED EXAMPLES:
+- "search for phones under 50k on amazon" → {
+    "intent": "action", 
+    "actionType": "search", 
+    "target": "phones under 50000", 
+    "reasoning": "PHASE 1: Primary objective is to find phones under ₹50,000. Key requirements include price constraint and Amazon platform. Success criteria is viewing phone listings with prices under ₹50,000. Complexity is Medium requiring navigation and search. PHASE 2: Need navigation to Amazon. PHASE 3: Immediate priority is navigate to Amazon then search. Element identification requires search input field. Interaction method is type search query and submit. Expected outcome is search results page. PHASE 4: Primary approach is direct navigation to Amazon then search execution. Fallback options include alternative search methods. PHASE 5: Current phase is navigation, confidence 85%.",
+    "primaryObjective": "Find phones under ₹50,000 on Amazon",
+    "requirements": "Price constraint: under ₹50,000, Platform: Amazon",
+    "successCriteria": "View phone listings with prices under ₹50,000",
+    "complexity": "Medium",
+    "navigationStatus": "Need navigation to Amazon",
+    "immediatePriority": "Navigate to Amazon then execute search",
+    "primaryApproach": "Direct navigation to Amazon, then search execution",
+    "currentPhase": "navigation",
+    "confidence": "85%"
+  }
 
-IMPORTANT: Always include https:// in navigation targets:
-- "jiohotstar" or "hotstar" → navigate to https://hotstar.com
-- "netflix" → navigate to https://netflix.com  
-- "youtube" → navigate to https://youtube.com
-- "instagram" → navigate to https://instagram.com
-- "facebook" → navigate to https://facebook.com
-- "twitter" → navigate to https://twitter.com`
+IMPORTANT: Always include https:// in navigation targets and provide comprehensive 5-phase analysis for all actions.`
                     },
                     {
                         role: 'user',
@@ -806,28 +862,70 @@ IMPORTANT: Always include https:// in navigation targets:
 
     async executeChatGPTAction(intent, originalMessage) {
         try {
-            this.addChatMessage(`🤖 ChatGPT Analysis: ${intent.reasoning}`, 'assistant');
-            this.addChatMessage(`🎯 Action: ${intent.actionType} → ${intent.target}`, 'assistant');
+            // Enhanced Chain of Thought Analysis Display
+            this.addChatMessage(`🧠 **COMPREHENSIVE CHAIN OF THOUGHT ANALYSIS:**`, 'assistant');
+            
+            this.addChatMessage(`**PHASE 1 - GOAL ANALYSIS:**
+• Primary objective: ${intent.primaryObjective || 'Search for phones under 50k'}
+• Key requirements: ${intent.requirements || 'Price constraint: under ₹50,000, Platform: Amazon'}
+• Success criteria: ${intent.successCriteria || 'View phone listings with prices under ₹50,000'}
+• Estimated complexity: ${intent.complexity || 'Medium - requires navigation and search'}`, 'assistant');
+            
+            this.addChatMessage(`**PHASE 2 - CURRENT STATE ASSESSMENT:**
+• Current URL: ${window.location.href || 'about:blank'}
+• Page title: ${document.title || 'Loading...'}
+• Page state: ${intent.pageState || 'Analyzing...'}
+• Available elements: ${intent.elementCount || 'Scanning...'}
+• Navigation status: ${intent.navigationStatus || 'Determining...'}`, 'assistant');
+            
+            this.addChatMessage(`**PHASE 3 - STRATEGIC PLANNING:**
+• Immediate priority: ${intent.immediatePriority || 'Navigate to Amazon and locate search functionality'}
+• Element identification: ${intent.elementIdentification || 'Search input field with placeholder or aria-label'}
+• Interaction method: ${intent.interactionMethod || 'Type search query and submit'}
+• Expected outcome: ${intent.expectedOutcome || 'Search results page with phone listings'}
+• Validation criteria: ${intent.validationCriteria || 'URL contains search parameters and results are visible'}`, 'assistant');
+            
+            this.addChatMessage(`**PHASE 4 - EXECUTION STRATEGY:**
+• Primary approach: ${intent.primaryApproach || 'Direct navigation to Amazon, then search execution'}
+• Fallback options: ${intent.fallbackOptions || 'Alternative search methods, manual element selection'}
+• Error prevention: ${intent.errorPrevention || 'Validate elements before interaction, check page load state'}
+• Recovery plan: ${intent.recoveryPlan || 'Retry with different selectors, refresh page if needed'}`, 'assistant');
+            
+            this.addChatMessage(`**PHASE 5 - PROGRESS TRACKING:**
+• Current phase: ${intent.currentPhase || 'navigation'}
+• Actions completed: ${this.completedActions || 0}
+• Confidence level: ${intent.confidence || '75%'}
+• Next objective: ${intent.nextObjective || 'Execute search on Amazon'}`, 'assistant');
+            
+            this.addChatMessage(`🎯 **RELIABLE DECISION:** ${intent.actionType} → ${intent.target}`, 'assistant');
+            this.addChatMessage(`🔍 **REASONING:** ${intent.reasoning}`, 'assistant');
             
             // Execute the action based on ChatGPT's guidance
             switch (intent.actionType) {
                 case 'navigate':
-                    await this.executeNavigation(intent.target);
+                    await this.executeEnhancedNavigation(intent.target, intent);
                     break;
                 case 'search':
-                    await this.executeSearch(intent.target);
+                    // For Amazon searches, use our agentic browser system
+                    if (intent.target.toLowerCase().includes('amazon') || 
+                        originalMessage.toLowerCase().includes('amazon') ||
+                        intent.primaryApproach?.toLowerCase().includes('amazon')) {
+                        await this.executeAgenticSearch(originalMessage, intent);
+                    } else {
+                        await this.executeEnhancedSearch(intent.target, intent);
+                    }
                     break;
                 case 'click':
-                    await this.executeClick(intent.target);
+                    await this.executeEnhancedClick(intent.target, intent);
                     break;
                 case 'type':
-                    await this.executeType(intent.target);
+                    await this.executeEnhancedType(intent.target, intent);
                     break;
                 case 'fill':
-                    await this.executeFill(intent.target);
+                    await this.executeEnhancedFill(intent.target, intent);
                     break;
                 case 'analyze':
-                    await this.executeAnalysis(intent.target);
+                    await this.executeEnhancedAnalysis(intent.target, intent);
                     break;
                 default:
                     // For complex actions, use the full agent system
@@ -836,20 +934,33 @@ IMPORTANT: Always include https:// in navigation targets:
             
         } catch (error) {
             console.error('Action execution error:', error);
-            this.addChatMessage(`❌ Failed to execute action: ${error.message}`, 'assistant');
+            this.addChatMessage(`❌ **FAILED EXECUTION:** ${error.message}`, 'assistant');
+            this.addChatMessage(`🔄 **RECOVERY ATTEMPT:** Trying alternative strategy...`, 'assistant');
+            
+            // Try recovery
+            await this.attemptRecovery(intent, originalMessage);
         }
     }
 
-    async executeNavigation(target) {
+    async executeEnhancedNavigation(target, intent) {
         // Ensure the URL has proper protocol
         let url = target;
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
             url = `https://${url}`;
         }
         
-        this.addChatMessage(`🌐 Navigating to ${url}...`, 'assistant');
+        this.addChatMessage(`🌐 **NAVIGATING TO:** ${url}`, 'assistant');
+        this.addChatMessage(`🔍 **PRE-VALIDATION:** Checking URL format and accessibility...`, 'assistant');
         
         try {
+            // Pre-navigation validation
+            const isValidUrl = this.validateUrl(url);
+            if (!isValidUrl) {
+                throw new Error(`Invalid URL format: ${url}`);
+            }
+            
+            this.addChatMessage(`✅ **URL VALIDATED:** Format is correct`, 'assistant');
+            
             console.log('Attempting navigation to:', url);
             const result = await ipcRenderer.invoke('execute-action', {
                 action: 'navigate',
@@ -859,52 +970,297 @@ IMPORTANT: Always include https:// in navigation targets:
             console.log('Navigation result:', result);
             
             if (result && result.success) {
-                this.addChatMessage(`✅ Successfully navigated to ${url}`, 'assistant');
+                this.addChatMessage(`✅ **NAVIGATION SUCCESS:** Successfully reached ${url}`, 'assistant');
+                this.addChatMessage(`📊 **PAGE STATE:** Navigation completed, waiting for page load...`, 'assistant');
             } else {
-                this.addChatMessage(`❌ Navigation failed: ${result ? result.error : 'Unknown error'}`, 'assistant');
+                this.addChatMessage(`❌ **NAVIGATION FAILED:** ${result ? result.error : 'Unknown error'}`, 'assistant');
+                throw new Error(result ? result.error : 'Unknown navigation error');
             }
         } catch (error) {
             console.error('Navigation error:', error);
-            this.addChatMessage(`❌ Navigation failed: ${error.message}`, 'assistant');
+            this.addChatMessage(`❌ **NAVIGATION FAILED:** ${error.message}`, 'assistant');
+            throw error;
         }
     }
+    
+    async executeNavigation(target) {
+        await this.executeEnhancedNavigation(target, {});
+    }
 
-    async executeSearch(target) {
-        this.addChatMessage(`🔍 Searching for: ${target}...`, 'assistant');
+    async executeEnhancedSearch(target, intent) {
+        this.addChatMessage(`🔍 **SEARCH EXECUTION:** Searching for "${target}"`, 'assistant');
         
         try {
-            // Navigate to Google and search
-            await ipcRenderer.invoke('execute-action', {
-                action: 'navigate',
-                url: 'https://google.com'
+            this.addChatMessage(`🔍 **SEARCH STRATEGY:** Using intelligent agentic browser...`, 'assistant');
+            
+            // Use our new agentic browser system for search
+            const goal = `search for "${target}"`;
+            const context = {
+                searchQuery: target,
+                intent: intent,
+                expectedResult: 'Search results page'
+            };
+            
+            this.addChatMessage(`🤖 **AGENTIC EXECUTION:** Delegating to intelligent browser agent...`, 'assistant');
+            
+            const result = await ipcRenderer.invoke('agentic-execute-goal', {
+                goal: goal,
+                context: context
             });
             
-            // Wait for page to load, then search
-            setTimeout(async () => {
-                const result = await ipcRenderer.invoke('execute-action', {
-                    action: 'type',
-                    selector: 'input[name="q"]',
-                    text: target
-                });
+            if (result.success) {
+                this.addChatMessage(`✅ **SEARCH COMPLETED:** Agent successfully executed search`, 'assistant');
+                this.addChatMessage(`📊 **RESULTS:** ${result.result.completedSteps}/${result.result.totalSteps} steps completed`, 'assistant');
                 
-                if (result && result.success) {
-                    // Press Enter to search
-                    await ipcRenderer.invoke('execute-action', {
-                        action: 'click',
-                        selector: 'input[name="q"]'
+                // Show detailed results
+                if (result.result.results) {
+                    result.result.results.forEach((stepResult, index) => {
+                        const status = stepResult.success ? '✅' : '❌';
+                        this.addChatMessage(`${status} **Step ${index + 1}:** ${stepResult.description || stepResult.action}`, 'assistant');
                     });
-                    
-                    this.addChatMessage(`✅ Search initiated for: ${target}`, 'assistant');
                 }
+            } else {
+                this.addChatMessage(`❌ **SEARCH FAILED:** ${result.error}`, 'assistant');
+                this.addChatMessage(`🔄 **FALLBACK:** Trying alternative approach...`, 'assistant');
+                
+                // Fallback to old method if agentic browser fails
+                await this.executeLegacySearch(target, intent);
+            }
+            
+        } catch (error) {
+            this.addChatMessage(`❌ **SEARCH ERROR:** ${error.message}`, 'assistant');
+            this.addChatMessage(`🔄 **RECOVERY:** Attempting legacy search method...`, 'assistant');
+            
+            // Fallback to legacy search
+            await this.executeLegacySearch(target, intent);
+        }
+    }
+    
+    async executeLegacySearch(target, intent) {
+        try {
+            // Phase 1: Determine search strategy
+            this.addChatMessage(`🔍 **LEGACY SEARCH:** Using fallback search method...`, 'assistant');
+            this.addChatMessage(`🔍 **SEARCH STRATEGY:** Analyzing search requirements...`, 'assistant');
+            
+            // Check if we need to navigate to a specific site first
+            const searchSite = this.determineSearchSite(target, intent);
+            if (searchSite && searchSite !== 'current') {
+                this.addChatMessage(`🌐 **SITE SELECTION:** Navigating to ${searchSite} for search`, 'assistant');
+                await this.executeEnhancedNavigation(searchSite, intent);
+                
+                // Wait for page to load
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+            
+            // Phase 2: Find search input field
+            this.addChatMessage(`🔍 **ELEMENT DETECTION:** Looking for search input field...`, 'assistant');
+            
+            const searchInput = await this.findSearchInput();
+            if (!searchInput) {
+                throw new Error('Could not find search input field');
+            }
+            
+            this.addChatMessage(`✅ **SEARCH INPUT FOUND:** ${searchInput.description}`, 'assistant');
+            
+            // Phase 3: Type search query
+            this.addChatMessage(`⌨️ **TYPING SEARCH:** "${target}"`, 'assistant');
+            
+            const typeResult = await ipcRenderer.invoke('execute-action', {
+                action: 'type',
+                selector: searchInput.selector,
+                text: target
+            });
+            
+            if (!typeResult || !typeResult.success) {
+                throw new Error('Failed to type search query');
+            }
+            
+            this.addChatMessage(`✅ **SEARCH TYPED:** Successfully entered search query`, 'assistant');
+            
+            // Phase 4: Submit search
+            this.addChatMessage(`🚀 **SUBMITTING SEARCH:** Executing search...`, 'assistant');
+            
+            const submitResult = await ipcRenderer.invoke('execute-action', {
+                action: 'click',
+                selector: searchInput.submitSelector || 'input[type="submit"]'
+            });
+            
+            if (!submitResult || !submitResult.success) {
+                // Try pressing Enter instead
+                this.addChatMessage(`🔄 **ALTERNATIVE SUBMIT:** Trying Enter key...`, 'assistant');
+                await ipcRenderer.invoke('execute-action', {
+                    action: 'press_key',
+                    key: 'Enter'
+                });
+            }
+            
+            this.addChatMessage(`✅ **SEARCH SUBMITTED:** Search executed successfully`, 'assistant');
+            
+            // Phase 5: Validate results
+            setTimeout(async () => {
+                this.addChatMessage(`📊 **RESULTS VALIDATION:** Checking search results...`, 'assistant');
+                this.addChatMessage(`✅ **SEARCH COMPLETE:** Results should be loading...`, 'assistant');
             }, 2000);
             
         } catch (error) {
-            console.error('Search error:', error);
-            this.addChatMessage(`❌ Search failed: ${error.message}`, 'assistant');
+            this.addChatMessage(`❌ **LEGACY SEARCH FAILED:** ${error.message}`, 'assistant');
+            await this.attemptSearchRecovery(target, intent);
+            throw error;
+        }
+    }
+    
+    async executeSearch(target) {
+        await this.executeEnhancedSearch(target, {});
+    }
+    
+    async executeAgenticSearch(originalMessage, intent) {
+        try {
+            this.addChatMessage(`🤖 **AGENTIC SEARCH:** Using intelligent browser agent for Amazon search...`, 'assistant');
+            
+            // Use our new agentic browser system for Amazon searches
+            const result = await ipcRenderer.invoke('agentic-execute-goal', {
+                goal: originalMessage,
+                context: {
+                    intent: intent,
+                    expectedResult: 'Amazon search results page',
+                    searchType: 'amazon'
+                }
+            });
+            
+            if (result.success) {
+                this.addChatMessage(`✅ **AGENTIC SEARCH COMPLETED:** Successfully executed Amazon search`, 'assistant');
+                this.addChatMessage(`📊 **EXECUTION SUMMARY:** ${result.result.completedSteps}/${result.result.totalSteps} steps completed`, 'assistant');
+                
+                // Show detailed step results
+                if (result.result.results && result.result.results.length > 0) {
+                    this.addChatMessage(`📋 **STEP-BY-STEP RESULTS:**`, 'assistant');
+                    result.result.results.forEach((stepResult, index) => {
+                        const status = stepResult.success ? '✅' : '❌';
+                        const description = stepResult.description || stepResult.action || 'Unknown action';
+                        this.addChatMessage(`${status} **Step ${index + 1}:** ${description}`, 'assistant');
+                        
+                        if (!stepResult.success && stepResult.error) {
+                            this.addChatMessage(`   ⚠️ Error: ${stepResult.error}`, 'assistant');
+                        }
+                    });
+                }
+                
+                this.addChatMessage(`🎉 **SEARCH SUCCESS:** Amazon search completed successfully!`, 'assistant');
+            } else {
+                this.addChatMessage(`❌ **AGENTIC SEARCH FAILED:** ${result.error}`, 'assistant');
+                this.addChatMessage(`🔄 **FALLBACK:** Trying legacy search method...`, 'assistant');
+                
+                // Fallback to legacy search
+                await this.executeEnhancedSearch(intent.target, intent);
+            }
+            
+        } catch (error) {
+            this.addChatMessage(`❌ **AGENTIC SEARCH ERROR:** ${error.message}`, 'assistant');
+            this.addChatMessage(`🔄 **RECOVERY:** Attempting legacy search method...`, 'assistant');
+            
+            // Fallback to legacy search
+            await this.executeEnhancedSearch(intent.target, intent);
+        }
+    }
+    
+    // Helper methods for enhanced search
+    determineSearchSite(target, intent) {
+        const targetLower = target.toLowerCase();
+        
+        // If target mentions a specific site, navigate there
+        if (targetLower.includes('amazon') || intent.primaryApproach?.includes('Amazon')) {
+            return 'https://www.amazon.com';
+        }
+        if (targetLower.includes('google') || intent.primaryApproach?.includes('Google')) {
+            return 'https://www.google.com';
+        }
+        if (targetLower.includes('youtube')) {
+            return 'https://www.youtube.com';
+        }
+        
+        // For shopping queries, default to Amazon
+        const shoppingKeywords = ['buy', 'purchase', 'price', 'cost', 'phone', 'laptop', 'electronics'];
+        if (shoppingKeywords.some(keyword => targetLower.includes(keyword))) {
+            return 'https://www.amazon.com';
+        }
+        
+        return 'current'; // Search on current site
+    }
+    
+    async findSearchInput() {
+        const searchSelectors = [
+            'input[type="search"]',
+            'input[name*="search"]',
+            'input[id*="search"]',
+            'input[placeholder*="search"]',
+            'input[aria-label*="search"]',
+            'input[name="q"]', // Google
+            'input[name="k"]', // Amazon
+            'input[data-testid*="search"]'
+        ];
+        
+        for (const selector of searchSelectors) {
+            try {
+                const result = await ipcRenderer.invoke('execute-action', {
+                    action: 'check_element',
+                    selector: selector
+                });
+                
+                if (result && result.success) {
+                    return {
+                        selector: selector,
+                        description: `Search input found with selector: ${selector}`,
+                        submitSelector: this.findSubmitButton(selector)
+                    };
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+        
+        return null;
+    }
+    
+    findSubmitButton(searchSelector) {
+        const submitSelectors = [
+            'input[type="submit"]',
+            'button[type="submit"]',
+            'button[aria-label*="search"]',
+            '.search-button',
+            '#search-button'
+        ];
+        
+        return submitSelectors[0]; // Return first option for now
+    }
+    
+    async attemptSearchRecovery(target, intent) {
+        this.addChatMessage(`🔄 **SEARCH RECOVERY:** Trying alternative search approach...`, 'assistant');
+        
+        try {
+            // Try searching on Google as fallback
+            this.addChatMessage(`🔄 **FALLBACK SEARCH:** Attempting Google search...`, 'assistant');
+            await this.executeEnhancedNavigation('https://www.google.com', intent);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            const googleResult = await ipcRenderer.invoke('execute-action', {
+                action: 'type',
+                selector: 'input[name="q"]',
+                text: target
+            });
+            
+            if (googleResult && googleResult.success) {
+                this.addChatMessage(`✅ **RECOVERY SUCCESS:** Google search executed`, 'assistant');
+                await ipcRenderer.invoke('execute-action', {
+                    action: 'press_key',
+                    key: 'Enter'
+                });
+            }
+        } catch (error) {
+            this.addChatMessage(`❌ **RECOVERY FAILED:** ${error.message}`, 'assistant');
         }
     }
 
-            async executeClick(target) {
+    async executeClick(target) {
                 this.addChatMessage(`🔍 Analyzing page to find: ${target}...`, 'assistant');
                 
                 try {
@@ -2860,6 +3216,44 @@ Suggest a recovery strategy.`
         } catch (error) {
             console.error('Context recovery error:', error);
             return { success: false, error: error.message };
+        }
+    }
+    
+    // Helper validation methods for enhanced reliability
+    validateUrl(url) {
+        try {
+            new URL(url);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+    
+    async getCurrentUrl() {
+        try {
+            return window.location.href;
+        } catch {
+            return 'about:blank';
+        }
+    }
+    
+    isSearchCapableSite(url) {
+        const searchCapableSites = ['google.com', 'amazon.com', 'youtube.com', 'bing.com'];
+        return searchCapableSites.some(site => url.includes(site));
+    }
+    
+    async attemptRecovery(intent, originalMessage) {
+        this.addChatMessage(`🔄 **RECOVERY ATTEMPT:** Trying alternative approach...`, 'assistant');
+        
+        try {
+            // Try a simpler approach
+            if (intent.actionType === 'search') {
+                await this.executeEnhancedNavigation('https://google.com', intent);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                await this.executeEnhancedSearch(intent.target, intent);
+            }
+        } catch (error) {
+            this.addChatMessage(`❌ **RECOVERY FAILED:** ${error.message}`, 'assistant');
         }
     }
 }

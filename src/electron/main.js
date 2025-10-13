@@ -3,6 +3,9 @@ const path = require('path');
 const fetch = require('node-fetch');
 require('dotenv').config();
 
+// Import simplified agentic browser system
+const SimpleAgenticBrowser = require('../agentic-browser/simple-agentic.js');
+
 class VerseBrowser {
   constructor() {
     this.mainWindow = null;
@@ -11,6 +14,7 @@ class VerseBrowser {
     this.currentTabId = null;
     this.sidebarVisible = false;
     this.ipcHandlersRegistered = false;
+    this.agenticBrowser = null;
   }
 
   createWindow() {
@@ -97,7 +101,21 @@ class VerseBrowser {
     this.browserView.setBounds({ x: 0, y: 80, width: 1400, height: 820 });
     this.browserView.webContents.loadURL(tab.url);
 
+    // Initialize agentic browser
+    this.initializeAgenticBrowser();
+
     console.log('Initial tab created:', tabId);
+  }
+
+  async initializeAgenticBrowser() {
+    try {
+      if (this.browserView && this.browserView.webContents) {
+        this.agenticBrowser = new SimpleAgenticBrowser();
+        console.log('Simple Agentic Browser initialized successfully');
+      }
+    } catch (error) {
+      console.error('Failed to initialize Agentic Browser:', error);
+    }
   }
 
   setupIPC() {
@@ -252,9 +270,51 @@ class VerseBrowser {
       this.settings[key] = value;
     });
 
+    // Agentic Browser commands
+    ipcMain.handle('agentic-execute-goal', async (event, { goal, context = {} }) => {
+      try {
+        if (!this.agenticBrowser) {
+          return { success: false, error: 'Agentic Browser not initialized' };
+        }
+
+        console.log('Executing agentic goal:', goal);
+        const result = await this.agenticBrowser.executeGoal(goal, context, this.browserView.webContents);
+        return { success: true, result };
+      } catch (error) {
+        console.error('Agentic goal execution failed:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('agentic-get-status', async () => {
+      try {
+        if (!this.agenticBrowser) {
+          return { success: false, error: 'Agentic Browser not initialized' };
+        }
+
+        const status = this.agenticBrowser.getStatus();
+        return { success: true, status };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('agentic-stop', async () => {
+      try {
+        if (!this.agenticBrowser) {
+          return { success: false, error: 'Agentic Browser not initialized' };
+        }
+
+        await this.agenticBrowser.stop();
+        return { success: true, message: 'Execution stopped' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
     ipcMain.handle('agent-command', async (event, command) => {
       try {
-        // Handle agent commands
+        // Handle legacy agent commands
         return { success: true, message: 'Agent command received' };
       } catch (error) {
         return { success: false, error: error.message };
@@ -573,7 +633,13 @@ class VerseBrowser {
     this.ipcHandlersRegistered = true;
   }
 
-  cleanupIPC() {
+  async cleanupIPC() {
+    // Cleanup agentic browser
+    if (this.agenticBrowser) {
+      await this.agenticBrowser.cleanup();
+      this.agenticBrowser = null;
+    }
+
     // Remove all IPC handlers
     ipcMain.removeAllListeners('navigate');
     ipcMain.removeAllListeners('go-back');
@@ -588,6 +654,9 @@ class VerseBrowser {
     ipcMain.removeAllListeners('toggle-fullscreen');
     ipcMain.removeAllListeners('get-setting');
     ipcMain.removeAllListeners('set-setting');
+    ipcMain.removeAllListeners('agentic-execute-goal');
+    ipcMain.removeAllListeners('agentic-get-status');
+    ipcMain.removeAllListeners('agentic-stop');
     ipcMain.removeAllListeners('agent-command');
     ipcMain.removeAllListeners('chatgpt-request');
     ipcMain.removeAllListeners('scrape-webpage');
@@ -678,10 +747,10 @@ app.whenReady().then(() => {
     console.error('Failed to create browser window:', error);
   }
 
-  app.on('activate', () => {
+  app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       try {
-        browser.cleanupIPC();
+        await browser.cleanupIPC();
         browser.createWindow();
       } catch (error) {
         console.error('Failed to recreate browser window:', error);
@@ -696,6 +765,6 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  browser.cleanupIPC();
+app.on('before-quit', async () => {
+  await browser.cleanupIPC();
 });
