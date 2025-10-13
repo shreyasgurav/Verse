@@ -595,6 +595,16 @@ class SimpleAgenticBrowser {
     this.isExecuting = false;
     this.currentPlan = null;
   }
+
+  /**
+   * Cleanup resources
+   */
+  async cleanup() {
+    console.log('🧹 Cleaning up agentic browser');
+    this.isExecuting = false;
+    this.currentPlan = null;
+    this.executionHistory = [];
+  }
 }
 
 module.exports = SimpleAgenticBrowser;

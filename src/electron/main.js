@@ -3,8 +3,8 @@ const path = require('path');
 const fetch = require('node-fetch');
 require('dotenv').config();
 
-// Import simplified agentic browser system
-const SimpleAgenticBrowser = require('../agentic-browser/simple-agentic.js');
+// Import robust agentic browser system
+const RobustAgenticBrowser = require('../agentic-browser/robust-agentic.js');
 
 class VerseBrowser {
   constructor() {
@@ -110,8 +110,8 @@ class VerseBrowser {
   async initializeAgenticBrowser() {
     try {
       if (this.browserView && this.browserView.webContents) {
-        this.agenticBrowser = new SimpleAgenticBrowser();
-        console.log('Simple Agentic Browser initialized successfully');
+        this.agenticBrowser = new RobustAgenticBrowser();
+        console.log('Robust Agentic Browser initialized successfully');
       }
     } catch (error) {
       console.error('Failed to initialize Agentic Browser:', error);

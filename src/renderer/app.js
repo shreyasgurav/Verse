@@ -915,6 +915,10 @@ IMPORTANT: Always include https:// in navigation targets and provide comprehensi
                         await this.executeEnhancedSearch(intent.target, intent);
                     }
                     break;
+                case 'complex_task':
+                    // For complex multi-step tasks, use enhanced agentic browser
+                    await this.executeComplexTask(originalMessage, intent);
+                    break;
                 case 'click':
                     await this.executeEnhancedClick(intent.target, intent);
                     break;
@@ -928,8 +932,14 @@ IMPORTANT: Always include https:// in navigation targets and provide comprehensi
                     await this.executeEnhancedAnalysis(intent.target, intent);
                     break;
                 default:
-                    // For complex actions, use the full agent system
-                    await this.handleComplexAction(originalMessage, intent);
+                    // Check if this is a complex task that needs special handling
+                    const isComplexTask = this.detectComplexTask(originalMessage);
+                    if (isComplexTask) {
+                        await this.executeComplexTask(originalMessage, intent);
+                    } else {
+                        // For other complex actions, use the full agent system
+                        await this.handleComplexAction(originalMessage, intent);
+                    }
             }
             
         } catch (error) {
@@ -1161,6 +1171,128 @@ IMPORTANT: Always include https:// in navigation targets and provide comprehensi
             // Fallback to legacy search
             await this.executeEnhancedSearch(intent.target, intent);
         }
+    }
+    
+    async executeComplexTask(originalMessage, intent) {
+        try {
+            this.addChatMessage(`🧠 **COMPLEX TASK:** Executing multi-step task with state awareness...`, 'assistant');
+            this.addChatMessage(`🎯 **TASK:** ${originalMessage}`, 'assistant');
+            
+            // Detect if this is a complex task that needs special handling
+            const isComplexTask = this.detectComplexTask(originalMessage);
+            
+            if (isComplexTask) {
+                this.addChatMessage(`🔍 **TASK ANALYSIS:** Detected complex multi-step workflow`, 'assistant');
+                this.addChatMessage(`📋 **SUB-GOALS:** ${isComplexTask.subGoals.join(', ')}`, 'assistant');
+                
+                // Use enhanced agentic browser for complex tasks
+                const result = await ipcRenderer.invoke('agentic-execute-goal', {
+                    goal: originalMessage,
+                    context: {
+                        intent: intent,
+                        taskType: 'complex',
+                        subGoals: isComplexTask.subGoals,
+                        expectedResult: isComplexTask.expectedResult
+                    }
+                });
+                
+                if (result.success) {
+                    this.addChatMessage(`✅ **COMPLEX TASK COMPLETED:** Successfully executed multi-step workflow`, 'assistant');
+                    this.addChatMessage(`📊 **EXECUTION SUMMARY:** ${result.result.completedSteps}/${result.result.totalSteps} steps completed`, 'assistant');
+                    
+                    // Show goal progress
+                    if (result.result.subGoals) {
+                        this.addChatMessage(`🎯 **GOAL PROGRESS:**`, 'assistant');
+                        this.addChatMessage(`   Current Phase: ${result.result.subGoals.currentPhase}`, 'assistant');
+                        this.addChatMessage(`   Completed Sub-goals: ${result.result.subGoals.completedSubGoals.join(', ')}`, 'assistant');
+                        this.addChatMessage(`   Final State: ${result.result.finalState}`, 'assistant');
+                    }
+                    
+                    // Show detailed step results
+                    if (result.result.results && result.result.results.length > 0) {
+                        this.addChatMessage(`📋 **DETAILED EXECUTION LOG:**`, 'assistant');
+                        result.result.results.forEach((stepResult, index) => {
+                            const status = stepResult.success ? '✅' : '❌';
+                            const description = stepResult.description || stepResult.action || 'Unknown action';
+                            const subGoal = stepResult.subGoal ? ` [${stepResult.subGoal}]` : '';
+                            this.addChatMessage(`${status} **Step ${index + 1}${subGoal}:** ${description}`, 'assistant');
+                            
+                            if (stepResult.stateVerified === false) {
+                                this.addChatMessage(`   ⚠️ State verification failed`, 'assistant');
+                            }
+                            
+                            if (!stepResult.success && stepResult.error) {
+                                this.addChatMessage(`   ❌ Error: ${stepResult.error}`, 'assistant');
+                            }
+                        });
+                    }
+                    
+                    this.addChatMessage(`🎉 **TASK SUCCESS:** Complex workflow completed successfully!`, 'assistant');
+                } else {
+                    this.addChatMessage(`❌ **COMPLEX TASK FAILED:** ${result.error}`, 'assistant');
+                    this.addChatMessage(`🔄 **FALLBACK:** Trying simplified approach...`, 'assistant');
+                    
+                    // Fallback to simple search
+                    await this.executeAgenticSearch(originalMessage, intent);
+                }
+            } else {
+                // Not a complex task, use regular agentic search
+                await this.executeAgenticSearch(originalMessage, intent);
+            }
+            
+        } catch (error) {
+            this.addChatMessage(`❌ **COMPLEX TASK ERROR:** ${error.message}`, 'assistant');
+            this.addChatMessage(`🔄 **RECOVERY:** Attempting simplified approach...`, 'assistant');
+            
+            // Fallback to simple search
+            await this.executeAgenticSearch(originalMessage, intent);
+        }
+    }
+    
+    detectComplexTask(message) {
+        const messageLower = message.toLowerCase();
+        
+        // Define complex task patterns
+        const complexPatterns = [
+            {
+                pattern: /find.*?and.*?add.*?cart/i,
+                subGoals: ['search', 'product_discovery', 'product_selection', 'cart_operation'],
+                expectedResult: 'Item added to cart'
+            },
+            {
+                pattern: /search.*?and.*?buy/i,
+                subGoals: ['search', 'product_discovery', 'product_selection', 'purchase_flow'],
+                expectedResult: 'Purchase completed'
+            },
+            {
+                pattern: /find.*?and.*?click/i,
+                subGoals: ['search', 'product_discovery', 'product_selection', 'interaction'],
+                expectedResult: 'Product selected'
+            },
+            {
+                pattern: /create.*?form.*?with.*?questions/i,
+                subGoals: ['navigation', 'form_setup', 'form_creation', 'question_creation'],
+                expectedResult: 'Google Form with questions created'
+            },
+            {
+                pattern: /create.*?google.*?form/i,
+                subGoals: ['navigation', 'form_setup', 'form_creation'],
+                expectedResult: 'Google Form created'
+            },
+            {
+                pattern: /google.*?form.*?mcq/i,
+                subGoals: ['navigation', 'form_setup', 'form_creation', 'question_creation'],
+                expectedResult: 'Google Form with MCQ questions created'
+            }
+        ];
+        
+        for (const complexPattern of complexPatterns) {
+            if (complexPattern.pattern.test(messageLower)) {
+                return complexPattern;
+            }
+        }
+        
+        return null; // Not a complex task
     }
     
     // Helper methods for enhanced search
