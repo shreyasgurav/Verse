@@ -1,84 +1,54 @@
-# Verse
+# VerseBrowser
 
-An open-source AI web automation Chrome extension that runs multi-agent systems locally in your browser. A free alternative to OpenAI Operator with support for multiple LLM providers.
+An open-source AI web automation Chrome extension that runs multi-agent systems locally in the browser. A free alternative to OpenAI Operator with support for multiple LLM providers (OpenAI, Anthropic, Gemini, Ollama, etc.).
 
-## What is Verse?
+## 📚 Documentation
 
-Verse is an AI-powered browser automation tool that can:
-- Navigate websites automatically
-- Fill out forms and interact with web elements
-- Extract data from web pages
-- Perform complex multi-step tasks
-- Answer questions about web content
+All project documentation has been organized in the [`docs/`](docs/) folder:
 
-## Key Features
+- **[📖 Main Documentation](docs/main/)** - Project overview, privacy policy, and store descriptions
+- **[🛠️ Development Guides](docs/development/)** - Coding standards, package management, and AI assistant guidelines  
+- **[📦 Package Documentation](docs/packages/)** - Individual package documentation
 
-- **Multi-Agent System**: Specialized AI agents (Planner, Navigator, Validator) work together
-- **Local Processing**: Everything runs in your browser - your data stays private
-- **Multiple LLM Support**: Works with OpenAI, Anthropic, Gemini, Ollama, and more
-- **Free & Open Source**: No subscription fees, just use your own API keys
-- **Real-time Chat Interface**: Interactive side panel for task management
+## 🚀 Quick Start
 
+1. **Install dependencies**: `pnpm install`
+2. **Start development**: `pnpm dev`
+3. **Build extension**: `pnpm build`
+4. **Load in Chrome**: Load the `dist/` folder as an unpacked extension
 
-## Quick Start
+## 🏗️ Architecture
 
-1. **Install the extension** from Chrome Web Store or manually
-2. **Configure API keys** in the extension settings
-3. **Open the side panel** by clicking the Verse icon in your toolbar
-4. **Start automating** by typing what you want to do
+- **Chrome Extension Manifest V3** with service workers
+- **Multi-agent AI system** (Navigator, Planner, Validator)
+- **React + TypeScript** UI with Tailwind CSS
+- **Monorepo** with Turbo and pnpm workspaces
+- **Multiple LLM providers** support
 
-### Example Tasks
-- "Find a laptop under $1000 on Amazon"
-- "Fill out this contact form with my information"
-- "Extract all product prices from this page"
-- "Navigate to Gmail and check my inbox"
+## 📋 Development Commands
 
-## Supported LLM Providers
-
-- **OpenAI**: GPT-4, GPT-3.5, GPT-5
-- **Anthropic**: Claude Sonnet, Claude Haiku
-- **Google**: Gemini Pro, Gemini Flash
-- **Ollama**: Local models
-- **Groq**: Fast inference
-- **Custom**: OpenAI-compatible APIs
-
-## Development
-
-### Prerequisites
-- Node.js (v22.12.0+)
-- pnpm (v9.15.1+)
-
-### Build Instructions
 ```bash
-# Install dependencies
-pnpm install
+# Development
+pnpm dev              # Start development mode
+pnpm build            # Build production version
+pnpm type-check       # Run TypeScript checks
+pnpm lint             # Run ESLint with auto-fix
 
-# Start development
-pnpm dev
+# Testing
+pnpm e2e              # Run end-to-end tests
+pnpm -F chrome-extension test  # Run unit tests
 
-# Build for production
-pnpm build
+# Package management
+pnpm clean            # Clean build artifacts
+pnpm update-version   # Update version across packages
 ```
 
-## Privacy
+## 🔗 Links
 
-- All processing happens locally in your browser
-- Your credentials and data never leave your device
-- Optional anonymous analytics can be disabled
-- You control your own API keys
-
-## License
-
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines and submit pull requests for any improvements.
-
-- **Repository**: [https://github.com/shreyasgurav/Verse](https://github.com/shreyasgurav/Verse)
-- **Issues**: Report bugs and request features
-- **Pull Requests**: Submit improvements and fixes
+- **📚 [Full Documentation](docs/)**
+- **🛠️ [Development Guidelines](docs/development/CLAUDE.md)**
+- **🔒 [Privacy Policy](docs/main/PRIVACY.md)**
 
 ---
 
-Made with ❤️ by the Shreyas Gurav.
+*For detailed information, please refer to the [documentation folder](docs/).*
