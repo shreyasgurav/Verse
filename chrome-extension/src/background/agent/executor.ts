@@ -44,6 +44,7 @@ export class Executor {
   private readonly generalSettings: GeneralSettingsConfig | undefined;
   private tasks: string[] = [];
   private isExecuting: boolean = false;
+  private thinkingSteps: Array<{ actor: Actors; content: string; timestamp: number; state: string }> = [];
   constructor(
     task: string,
     taskId: string,
@@ -91,12 +92,37 @@ export class Executor {
   }
 
   subscribeExecutionEvents(callback: EventCallback): void {
-    this.context.eventManager.subscribe(EventType.EXECUTION, callback);
+    // Wrap the callback to also collect thinking steps
+    const wrappedCallback: EventCallback = async (event) => {
+      // Collect thinking steps from planner and navigator
+      if (event.data?.details && 
+          (event.actor === Actors.PLANNER || event.actor === Actors.NAVIGATOR) &&
+          (event.state === ExecutionState.STEP_OK || event.state === ExecutionState.ACT_START)) {
+        this.thinkingSteps.push({
+          actor: event.actor, // Keep as Actors enum, not lowercase string
+          content: event.data.details,
+          timestamp: event.timestamp || Date.now(),
+          state: event.state
+        });
+      }
+      // Call the original callback
+      await callback(event);
+    };
+    
+    this.context.eventManager.subscribe(EventType.EXECUTION, wrappedCallback);
   }
 
   clearExecutionEvents(): void {
     // Clear all execution event listeners
     this.context.eventManager.clearSubscribers(EventType.EXECUTION);
+  }
+
+  getThinkingSteps(): Array<{ actor: Actors; content: string; timestamp: number; state: string }> {
+    return [...this.thinkingSteps];
+  }
+
+  clearThinkingSteps(): void {
+    this.thinkingSteps = [];
   }
 
   addFollowUpTask(task: string): void {
@@ -151,6 +177,14 @@ export class Executor {
 
     this.isExecuting = true;
     logger.info(`🚀 Executing task: ${this.tasks[this.tasks.length - 1]}`);
+    
+    // Clear thinking steps from previous task (but only if this is a NEW task, not follow-up)
+    // Follow-up tasks should keep previous thinking steps
+    if (this.tasks.length === 1) {
+      this.thinkingSteps = [];
+      logger.info('🧹 Cleared thinking steps for new task');
+    }
+    
     // reset the step counter
     const context = this.context;
     context.nSteps = 0;

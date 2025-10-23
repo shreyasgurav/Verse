@@ -116,6 +116,7 @@ const SidePanel = () => {
   // Tab-specific state
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
   const tabIdRef = useRef<number | null>(null);
+  const [needsConnection, setNeedsConnection] = useState(false);
   
   // Tab-specific chat history store
   const [tabChatHistoryStore, setTabChatHistoryStore] = useState<ChatHistoryStorage | null>(null);
@@ -136,7 +137,14 @@ const SidePanel = () => {
   // Function to initialize tab context (extracted for reuse)
   const initializeTabContext = useCallback(async (forceTabId?: number) => {
       try {
-        let tabId: number | null = null;
+        let tabId: number | null = forceTabId || null;
+        
+        // CRITICAL: If forceTabId is provided, use it immediately and set ref SYNCHRONOUSLY
+        // This prevents race conditions where reloadCurrentSession runs before tabId is set
+        if (forceTabId) {
+          console.log('🔒 Using forced tab ID:', forceTabId);
+          tabIdRef.current = forceTabId; // Set IMMEDIATELY before any async operations
+        }
         
         // CRITICAL: Get the tab ID from the background script via the port connection
         // This is the ONLY reliable way to know which tab this side panel belongs to
@@ -152,6 +160,7 @@ const SidePanel = () => {
           const urlTabId = urlParams.get('tabId');
           if (urlTabId) {
             tabId = parseInt(urlTabId, 10);
+            tabIdRef.current = tabId; // Set IMMEDIATELY
             console.log('Got tab ID from URL params:', tabId);
           }
         }
@@ -168,6 +177,7 @@ const SidePanel = () => {
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             if (tabs[0]?.id) {
               tabId = tabs[0].id;
+              tabIdRef.current = tabId; // Set IMMEDIATELY even in fallback
               console.warn('⚠️ Got tab ID from active tab query (fallback):', tabId);
               console.warn('This may be incorrect if user switched tabs quickly');
             }
@@ -192,6 +202,15 @@ const SidePanel = () => {
           
           setCurrentTabId(tabId);
           tabIdRef.current = tabId;
+          
+          // CRITICAL: Reset all UI states for new tab
+          setShowStopButton(false);
+          setInputEnabled(true);
+          setCurrentTaskState('idle');
+          setCurrentThinking([]);
+          currentThinkingRef.current = [];
+          setCurrentTaskId(null);
+          console.log('✅ Reset UI states for tab:', tabId);
           
           // Create tab-specific chat history store
           const { createChatHistoryStorage } = await import('@extension/storage');
@@ -230,6 +249,9 @@ const SidePanel = () => {
           }
           
           console.log('=== Initialization Complete ===');
+          
+          // CRITICAL: Trigger connection setup
+          setNeedsConnection(true);
         } else {
           console.error('❌ Failed to determine tab ID!');
         }
@@ -356,9 +378,19 @@ const SidePanel = () => {
     try {
       const configuredAgents = await agentModelStore.getConfiguredAgents();
 
-      // Check if at least one agent (preferably Navigator) is configured
-      const hasAtLeastOneModel = configuredAgents.length > 0;
-      setHasConfiguredModels(hasAtLeastOneModel);
+      // CRITICAL: Check if BOTH planner AND navigator are configured
+      // Both agents are required for the system to work
+      const hasPlanner = configuredAgents.includes('planner' as any);
+      const hasNavigator = configuredAgents.includes('navigator' as any);
+      const allConfigured = hasPlanner && hasNavigator;
+      
+      console.log('🔍 Model configuration check:', { 
+        configuredAgents, 
+        hasPlanner, 
+        hasNavigator, 
+        allConfigured 
+      });
+      setHasConfiguredModels(allConfigured);
     } catch (error) {
       console.error('Error checking model configuration:', error);
       setHasConfiguredModels(false);
@@ -447,13 +479,32 @@ const SidePanel = () => {
 
   // Reload messages from storage when panel becomes visible
   const reloadCurrentSession = useCallback(async () => {
-    // CRITICAL: Don't reload if task is actively running
-    // This prevents race conditions when switching tabs during task execution
-    if (showStopButton || currentTaskState === 'thinking' || currentTaskState === 'starting') {
-      console.log('⏸️ Skipping reload - task is actively running');
+    // CRITICAL: Don't reload if we don't have a tab ID yet
+    // This prevents checking wrong tab during initialization
+    if (!tabIdRef.current) {
+      console.log('⏸️ Skipping reload - no tab ID yet');
       return;
     }
     
+    // CRITICAL: Verify we're on the correct tab before reloading
+    // This prevents loading messages from the wrong tab when switching quickly
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const activeTabId = tabs[0]?.id;
+      
+      if (activeTabId && activeTabId !== tabIdRef.current) {
+        console.log('⚠️ Tab mismatch detected! Active:', activeTabId, 'Current:', tabIdRef.current);
+        console.log('Reinitializing for correct tab...');
+        await initializeTabContext(activeTabId);
+        return;
+      }
+      
+    } catch (error) {
+      console.error('Failed to verify tab:', error);
+    }
+    
+    // CRITICAL: Always reload messages from storage first
+    // This ensures we show completed tasks even if we weren't connected when they finished
     if (sessionIdRef.current && tabChatHistoryStore) {
       try {
         const session = await tabChatHistoryStore.getSession(sessionIdRef.current);
@@ -490,12 +541,23 @@ const SidePanel = () => {
         console.error('Failed to reload session:', error);
       }
     }
-  }, [tabChatHistoryStore, showStopButton, currentTaskState]);
+    
+    // CRITICAL: After reloading from storage, check if executor is still running
+    // This ensures UI state matches executor state (stop button, input disabled, thinking block)
+    if (portRef.current && tabIdRef.current) {
+      console.log('🔍 Checking executor status for tab:', tabIdRef.current);
+      portRef.current.postMessage({ 
+        type: 'check_executor_status', 
+        tabId: tabIdRef.current 
+      });
+    }
+  }, [tabChatHistoryStore]);
 
-  // Re-check model configuration when the side panel becomes visible again
+  // Re-check model configuration when the side panel becomes visible or focused
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (!document.hidden) {
+        console.log('📋 Side panel became visible, rechecking configuration...');
         // Panel became visible, check if we're on the correct tab
         try {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -520,7 +582,7 @@ const SidePanel = () => {
             // Reinitialize with correct tab
             await initializeTabContext();
           } else {
-            // Same tab, just reload session
+            // Same tab, just reload session and recheck config
             checkModelConfiguration();
             loadGeneralSettings();
             reloadCurrentSession();
@@ -535,10 +597,19 @@ const SidePanel = () => {
       }
     };
     
+    // Also recheck when window gains focus (e.g., clicking on side panel after settings)
+    const handleFocus = () => {
+      console.log('🎯 Side panel gained focus, rechecking configuration...');
+      checkModelConfiguration();
+      loadGeneralSettings();
+    };
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [checkModelConfiguration, loadGeneralSettings, reloadCurrentSession, initializeTabContext]);
 
@@ -609,50 +680,28 @@ const SidePanel = () => {
       }
 
       // ===== HANDLE THINKING STEPS =====
+      // Show planner/navigator messages as regular messages (no thinking block)
       const isThinking = isThinkingEvent(actor, state);
       if (isThinking && content) {
-        const newStep: ThinkingStep = {
-          actor,
-          content,
-          timestamp,
-          state: state.toString()
-        };
-        
-        const updatedThinking = [...currentThinkingRef.current, newStep];
-        setCurrentThinking(updatedThinking);
-        currentThinkingRef.current = updatedThinking;
         setCurrentTaskState('thinking');
         
-        // Replace progress with latest thinking message
-        const reasoningMessage: Message = {
-          actor: Actors.SYSTEM,
+        // Show as a regular assistant message
+        const thinkingMessage: Message = {
+          actor: actor, // Keep original actor (planner/navigator)
           content: content,
           timestamp: timestamp,
           messageType: 'assistant',
           taskId: data.taskId
         };
         
+        // Remove progress message (3 dots) and add thinking message
         setMessages(prev => {
-          const progressIndex = prev.findIndex(
-            msg => msg.taskId === data.taskId && msg.messageType === 'progress'
+          const filtered = prev.filter(
+            msg => !(msg.taskId === data.taskId && msg.messageType === 'progress')
           );
-          
-          if (progressIndex !== -1) {
-            const newMessages = [...prev];
-            newMessages[progressIndex] = reasoningMessage;
-            return newMessages;
-          }
-          return [...prev, reasoningMessage];
+          return [...filtered, thinkingMessage];
         });
-        
-        // CRITICAL: Save reasoning message to storage
-        if (sessionIdRef.current && tabChatHistoryStore) {
-          tabChatHistoryStore
-            .addMessage(sessionIdRef.current, reasoningMessage)
-            .catch(err => console.error('Failed to save reasoning message:', err));
-        }
-        
-        return; // ← IMPORTANT: Exit here to prevent falling through
+        return; // Exit here
       }
 
       // ===== HANDLE FINAL EVENTS =====
@@ -660,44 +709,16 @@ const SidePanel = () => {
       if (isFinal) {
         setCurrentTaskState('complete');
         
-        // Only add message if there's content
-        if (content) {
-          const finalMessage: Message = {
-            actor: Actors.SYSTEM,
-            content: content,
-            timestamp: timestamp,
-            messageType: 'assistant',
-            taskId: data.taskId
-          };
-
-          setMessages(prev => {
-            // Remove ONLY progress messages, not thinking messages
-            const filtered = prev.filter(
-              msg => !(msg.taskId === data.taskId && msg.messageType === 'progress')
-            );
-            
-            // Check if we already have a message with same content (from thinking)
-            const hasDuplicate = filtered.some(
-              msg => msg.content === content && msg.taskId === data.taskId
-            );
-            
-            // Only add if not duplicate
-            if (hasDuplicate) {
-              return filtered;
-            }
-            return [...filtered, finalMessage];
-          });
-          
-          // CRITICAL: Save final message to storage (if not duplicate)
-          const hasDuplicate = messages.some(
-            msg => msg.content === content && msg.taskId === data.taskId
+        // DON'T add final message here - it's saved by background script to storage
+        // The polling mechanism will load it from storage automatically
+        // This prevents duplicate final messages
+        
+        // Just remove progress messages (3 dots)
+        setMessages(prev => {
+          return prev.filter(
+            msg => !(msg.taskId === data.taskId && msg.messageType === 'progress')
           );
-          if (!hasDuplicate && sessionIdRef.current && tabChatHistoryStore) {
-            tabChatHistoryStore
-              .addMessage(sessionIdRef.current, finalMessage)
-              .catch(err => console.error('Failed to save final message:', err));
-          }
-        }
+        });
         
         // ALWAYS clear state and update UI, even if no content
         setCurrentThinking([]);
@@ -773,6 +794,72 @@ const SidePanel = () => {
         // Add type checking for message
         if (message && message.type === EventType.EXECUTION) {
           handleTaskState(message);
+        } else if (message && message.type === 'thinking_steps') {
+          // Handle thinking steps response from executor
+          console.log('Received thinking steps from executor:', message.steps.length);
+          if (message.steps && message.steps.length > 0) {
+            // Update currentThinkingRef with all thinking steps from executor
+            currentThinkingRef.current = message.steps.map((step: any) => ({
+              actor: step.actor,
+              content: step.content,
+              timestamp: step.timestamp
+            }));
+            // Also update the live thinking state for display
+            setCurrentThinking([...currentThinkingRef.current]);
+          }
+        } else if (message && message.type === 'executor_status') {
+          // Handle executor status response
+          console.log('📊 Executor status:', 'running:', message.isRunning, 'steps:', message.thinkingSteps?.length || 0);
+          
+          if (message.isRunning) {
+            // Executor is running - update UI to show active state
+            console.log('✅ Executor is running, updating UI state');
+            setShowStopButton(true);
+            setInputEnabled(false);
+            setCurrentTaskState('thinking');
+            
+            // Add progress message (3 dots) if not already present
+            setMessages(prev => {
+              const hasProgress = prev.some(msg => msg.messageType === 'progress');
+              if (!hasProgress) {
+                const progressMsg: Message = {
+                  actor: Actors.SYSTEM,
+                  content: progressMessage,
+                  timestamp: Date.now(),
+                  messageType: 'progress',
+                  taskId: message.taskId || 'unknown'
+                };
+                return [...prev, progressMsg];
+              }
+              return prev;
+            });
+            
+            // Update thinking steps if available
+            if (message.thinkingSteps && message.thinkingSteps.length > 0) {
+              currentThinkingRef.current = message.thinkingSteps.map((step: any) => ({
+                actor: step.actor,
+                content: step.content,
+                timestamp: step.timestamp
+              }));
+              setCurrentThinking([...currentThinkingRef.current]);
+            } else {
+              // Executor is running but no steps yet - show "Starting..." placeholder
+              console.log('⏳ Executor running but no steps yet, showing placeholder');
+              currentThinkingRef.current = [{
+                actor: Actors.SYSTEM,
+                content: 'Starting task...',
+                timestamp: Date.now(),
+                state: 'task.start'
+              }];
+              setCurrentThinking([...currentThinkingRef.current]);
+            }
+          } else {
+            // Executor is not running - ensure UI shows idle state
+            console.log('⏹️ Executor is not running, UI should be idle');
+            setShowStopButton(false);
+            setInputEnabled(true);
+            setCurrentTaskState('idle');
+          }
         } else if (message && message.type === 'error') {
           // Handle error messages from service worker
           appendMessage({
@@ -804,6 +891,18 @@ const SidePanel = () => {
             if (!portRef.current && tabIdRef.current) {
               console.log('Reconnecting to background service...');
               setupConnection();
+              
+              // CRITICAL: Request current thinking steps from executor after reconnecting
+              // This ensures we show all thinking steps, not just the ones after reconnection
+              setTimeout(() => {
+                if (portRef.current && tabIdRef.current) {
+                  console.log('Requesting thinking steps from executor...');
+                  portRef.current.postMessage({ 
+                    type: 'get_thinking_steps', 
+                    tabId: tabIdRef.current 
+                  });
+                }
+              }, 100); // Small delay to ensure connection is established
             }
           }, 500); // Short delay before reconnection
         } else {
@@ -842,6 +941,16 @@ const SidePanel = () => {
       portRef.current = null;
     }
   }, [handleTaskState, appendMessage, stopConnection]);
+
+  // CRITICAL: Setup connection immediately when tab ID is available
+  // This ensures the port is ready BEFORE user sends any messages
+  useEffect(() => {
+    if (needsConnection && tabIdRef.current && !portRef.current) {
+      console.log('🔌 Setting up connection for tab:', tabIdRef.current);
+      setupConnection();
+      setNeedsConnection(false); // Reset flag
+    }
+  }, [needsConnection, setupConnection]); // Trigger when flag is set
 
   // Add safety check for message sending
   const sendMessage = useCallback(

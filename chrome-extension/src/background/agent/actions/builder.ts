@@ -312,15 +312,17 @@ export class ActionBuilder {
     actions.push(inputText);
 
     // Tab Management Actions
-    const switchTab = new Action(async (input: z.infer<typeof switchTabActionSchema.schema>) => {
-      const intent = input.intent || t('act_switchTab_start', [input.tab_id.toString()]);
-      this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
-      await this.context.browserContext.switchTab(input.tab_id);
-      const msg = t('act_switchTab_ok', [input.tab_id.toString()]);
-      this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
-      return new ActionResult({ extractedContent: msg, includeInMemory: true });
-    }, switchTabActionSchema);
-    actions.push(switchTab);
+    // DISABLED: switchTab action removed to prevent agent from switching tabs
+    // This ensures the agent only works on the current tab where the command was given
+    // const switchTab = new Action(async (input: z.infer<typeof switchTabActionSchema.schema>) => {
+    //   const intent = input.intent || t('act_switchTab_start', [input.tab_id.toString()]);
+    //   this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_START, intent);
+    //   await this.context.browserContext.switchTab(input.tab_id);
+    //   const msg = t('act_switchTab_ok', [input.tab_id.toString()]);
+    //   this.context.emitEvent(Actors.NAVIGATOR, ExecutionState.ACT_OK, msg);
+    //   return new ActionResult({ extractedContent: msg, includeInMemory: true });
+    // }, switchTabActionSchema);
+    // actions.push(switchTab);
 
     const openTab = new Action(async (input: z.infer<typeof openTabActionSchema.schema>) => {
       const intent = input.intent || t('act_openTab_start', [input.url]);

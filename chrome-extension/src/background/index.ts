@@ -27,6 +27,16 @@ const tabExecutors = new Map<number, Executor>();
 const tabPorts = new Map<number, chrome.runtime.Port>();
 const portToTabId = new Map<chrome.runtime.Port, number>();
 
+// Memory monitoring helper - logs current memory usage
+function logMemoryStats() {
+  logger.info(`📊 Memory Stats - Executors: ${tabExecutors.size}, Contexts: ${tabBrowserContexts.size}, Ports: ${tabPorts.size}`);
+}
+
+// Log memory stats every 30 seconds in development
+if (import.meta.env.DEV) {
+  setInterval(logMemoryStats, 30000);
+}
+
 // Helper function to get or create browser context for a tab
 function getOrCreateBrowserContext(tabId: number): BrowserContext {
   let context = tabBrowserContexts.get(tabId);
@@ -299,6 +309,30 @@ chrome.runtime.onConnect.addListener(port => {
             return port.postMessage({ type: 'success', screenshot });
           }
 
+          case 'get_thinking_steps': {
+            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+            const executor = tabExecutors.get(message.tabId);
+            if (!executor) {
+              return port.postMessage({ type: 'thinking_steps', steps: [] });
+            }
+            const thinkingSteps = executor.getThinkingSteps();
+            logger.info('get_thinking_steps', message.tabId, thinkingSteps.length);
+            return port.postMessage({ type: 'thinking_steps', steps: thinkingSteps });
+          }
+
+          case 'check_executor_status': {
+            if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+            const executor = tabExecutors.get(message.tabId);
+            const isRunning = executor ? executor.isRunning() : false;
+            const thinkingSteps = executor ? executor.getThinkingSteps() : [];
+            logger.info('check_executor_status', message.tabId, 'running:', isRunning, 'steps:', thinkingSteps.length);
+            return port.postMessage({ 
+              type: 'executor_status', 
+              isRunning,
+              thinkingSteps 
+            });
+          }
+
           case 'state': {
             try {
               // Get current tab ID from active tab
@@ -418,28 +452,14 @@ chrome.runtime.onConnect.addListener(port => {
       logger.info('Side panel disconnected for tab:', disconnectedTabId);
       
       if (disconnectedTabId) {
-        // Don't immediately cancel the executor - the side panel might reconnect
-        // Only clean up the port references
+        // CRITICAL FIX: Don't cancel executor when side panel disconnects
+        // The executor should continue running in the background
+        // This allows tasks to complete even when user switches tabs
         portToTabId.delete(port);
         tabPorts.delete(disconnectedTabId);
         
-        // Set a timeout to cancel the executor only if no reconnection happens
-        // This allows for transient disconnections during navigation/tab switches
-        // Increased to 5 seconds to accommodate slower devices and network issues
-        setTimeout(() => {
-          // Check if a new port has connected for this tab
-          const currentPort = tabPorts.get(disconnectedTabId);
-          if (!currentPort) {
-            // No reconnection happened - user likely closed the side panel
-            logger.info('No reconnection for tab', disconnectedTabId, '- cancelling executor');
-            const executor = tabExecutors.get(disconnectedTabId);
-            if (executor) {
-              executor.cancel();
-            }
-          } else {
-            logger.info('Side panel reconnected for tab', disconnectedTabId, '- continuing execution');
-          }
-        }, 5000); // Wait 5 seconds for reconnection (increased from 2s for slower devices)
+        logger.info('Side panel disconnected, but executor will continue running for tab:', disconnectedTabId);
+        // Executor will only be cancelled via explicit 'cancel_task' command from user
       }
     });
   }
@@ -531,6 +551,91 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
   // Subscribe to new events
   executor.subscribeExecutionEvents(async event => {
     try {
+      // CRITICAL: Save planner/navigator messages to storage immediately
+      // This ensures messages persist even if user switches tabs
+      const isThinkingEvent = 
+        (event.actor === Actors.PLANNER && event.state === ExecutionState.STEP_OK) ||
+        (event.actor === Actors.NAVIGATOR && event.state === ExecutionState.STEP_OK);
+      
+      if (isThinkingEvent && event.data?.details) {
+        try {
+          const { createChatHistoryStorage } = await import('@extension/storage');
+          const chatStore = createChatHistoryStorage(tabId);
+          
+          // Get or create session
+          const sessions = await chatStore.getSessionsMetadata();
+          let sessionId: string;
+          
+          if (sessions.length > 0) {
+            const sortedSessions = sessions.sort((a, b) => b.createdAt - a.createdAt);
+            sessionId = sortedSessions[0].id;
+          } else {
+            const taskId = await executor.getCurrentTaskId();
+            const session = await chatStore.createSession(taskId);
+            sessionId = session.id;
+          }
+          
+          // Save planner/navigator message
+          const thinkingMessage = {
+            actor: event.actor,
+            content: event.data.details,
+            timestamp: event.timestamp || Date.now(),
+            messageType: 'assistant' as const,
+            taskId: event.data.taskId
+          };
+          
+          await chatStore.addMessage(sessionId, thinkingMessage);
+          logger.debug(`Saved ${event.actor} message to storage`);
+        } catch (storageError) {
+          logger.error('Failed to save thinking message:', storageError);
+        }
+      }
+      
+      // CRITICAL: Save final message when task completes
+      if (event.state === ExecutionState.TASK_OK || event.state === ExecutionState.TASK_FAIL) {
+        try {
+          const { createChatHistoryStorage } = await import('@extension/storage');
+          const chatStore = createChatHistoryStorage(tabId);
+          
+          // Get or create session
+          const sessions = await chatStore.getSessionsMetadata();
+          let sessionId: string;
+          
+          if (sessions.length > 0) {
+            const sortedSessions = sessions.sort((a, b) => b.createdAt - a.createdAt);
+            sessionId = sortedSessions[0].id;
+          } else {
+            const taskId = await executor.getCurrentTaskId();
+            const session = await chatStore.createSession(taskId);
+            sessionId = session.id;
+          }
+          
+          // Get thinking steps from executor
+          const thinkingSteps = executor.getThinkingSteps();
+          
+          // Save final message with thinking steps attached
+          if (event.data?.details) {
+            const finalMessage = {
+              actor: Actors.SYSTEM,
+              content: event.data.details,
+              timestamp: event.timestamp || Date.now(),
+              messageType: 'assistant' as const,
+              taskId: event.data.taskId,
+              thinkingSteps: thinkingSteps.length > 0 ? thinkingSteps : undefined
+            };
+            
+            await chatStore.addMessage(sessionId, finalMessage);
+            logger.info(`Saved final message with ${thinkingSteps.length} thinking steps to storage`);
+          }
+          
+          // DON'T clear thinking steps immediately - keep them so they can be retrieved
+          // when switching back to this tab. They'll be cleared when executor is deleted (after 5 min)
+          // executor.clearThinkingSteps(); // REMOVED
+        } catch (storageError) {
+          logger.error('Failed to save final message with thinking steps:', storageError);
+        }
+      }
+      
       // Get all tabs that are part of this task session
       const relatedTabs = taskSessionTabs.get(tabId) || new Set([tabId]);
       
@@ -547,61 +652,24 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
       }
       
       // Broadcast event to all related tabs
+      // CRITICAL: Only send to the original tab that started the task
+      // This prevents cross-tab event contamination when switching tabs quickly
       let sentCount = 0;
-      for (const relatedTabId of relatedTabs) {
-        const port = tabPorts.get(relatedTabId);
-        if (port) {
-          try {
-            port.postMessage(event);
-            sentCount++;
-          } catch (portError) {
-            logger.warning(`Failed to send event to tab ${relatedTabId}:`, portError);
-            // Remove dead port from related tabs
-            relatedTabs.delete(relatedTabId);
-          }
+      const port = tabPorts.get(tabId);
+      if (port) {
+        try {
+          port.postMessage(event);
+          sentCount++;
+        } catch (portError) {
+          logger.warning(`Failed to send event to tab ${tabId}:`, portError);
         }
       }
       
       if (sentCount === 0) {
         logger.info(`No active ports found for task session (original tab: ${tabId}), event not sent:`, event.state);
-        // CRITICAL: Save event to storage so it's available when side panel reopens
-        // This ensures messages aren't lost when side panel is closed during task execution
-        try {
-          const { createChatHistoryStorage } = await import('@extension/storage');
-          const chatStore = createChatHistoryStorage(tabId);
-          
-          // Get or create session for this task
-          const sessions = await chatStore.getSessionsMetadata();
-          let sessionId: string;
-          
-          if (sessions.length > 0) {
-            // Use most recent session
-            const sortedSessions = sessions.sort((a, b) => b.createdAt - a.createdAt);
-            sessionId = sortedSessions[0].id;
-          } else {
-            // Create new session
-            const taskId = await executor.getCurrentTaskId();
-            const session = await chatStore.createSession(taskId);
-            sessionId = session.id;
-            logger.info(`Created new session ${sessionId} for background event storage`);
-          }
-          
-          // Convert event to chat message and save
-          if (event.data?.details) {
-            const message = {
-              actor: event.actor === Actors.SYSTEM ? Actors.SYSTEM : Actors.NAVIGATOR,
-              content: event.data.details,
-              timestamp: event.timestamp || Date.now(),
-              messageType: event.state.includes('thinking') ? 'thinking' as const : 
-                          event.state.includes('reasoning') ? 'thinking' as const : 'assistant' as const
-            };
-            
-            await chatStore.addMessage(sessionId, message);
-            logger.info(`Saved event to storage for closed side panel: ${event.state}`);
-          }
-        } catch (storageError) {
-          logger.error('Failed to save event to storage:', storageError);
-        }
+        // NOTE: We don't save individual events to storage anymore
+        // The final message with all thinking steps is saved when task completes (lines 534-575)
+        // This prevents duplicate messages and ensures clean storage
       } else {
         logger.debug(`Event ${event.state} broadcast to ${sentCount} tab(s) in session`);
       }
@@ -627,8 +695,7 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
       }
     }
 
-    // Only cleanup on final states, but DON'T delete executor from map
-    // This allows follow-up tasks to work
+    // Only cleanup on final states
     if (
       event.state === ExecutionState.TASK_OK ||
       event.state === ExecutionState.TASK_FAIL ||
@@ -637,8 +704,30 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
       const tabExecutor = tabExecutors.get(tabId);
       if (tabExecutor) {
         await tabExecutor.cleanup();
-        // Don't delete from map - let it be reused for follow-up tasks
         logger.info(`Executor for tab ${tabId} cleaned up but kept in map for follow-up tasks`);
+        
+        // CRITICAL FIX: Delete executor after 5 minutes of inactivity to prevent memory leak
+        // This allows follow-up tasks within 5 minutes, but cleans up idle executors
+        setTimeout(() => {
+          const executor = tabExecutors.get(tabId);
+          if (executor && !executor.isRunning()) {
+            tabExecutors.delete(tabId);
+            logger.info(`🧹 Cleaned up idle executor for tab ${tabId} after 5 minutes`);
+          }
+        }, 300000); // 5 minutes
+        
+        // CRITICAL FIX: Delete browser context after 1 minute to prevent memory leak
+        // Shorter timeout than executor since context holds more resources (Puppeteer, DOM)
+        setTimeout(async () => {
+          const context = tabBrowserContexts.get(tabId);
+          const executor = tabExecutors.get(tabId);
+          // Only cleanup if no executor is running
+          if (context && (!executor || !executor.isRunning())) {
+            await context.cleanup();
+            tabBrowserContexts.delete(tabId);
+            logger.info(`🧹 Cleaned up idle browser context for tab ${tabId} after 1 minute`);
+          }
+        }, 60000); // 1 minute
       }
       
       // Clean up task session tracking on task completion

@@ -221,7 +221,8 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          {/* Replay Historical Tasks - Removed from UI, will be implemented properly in future with dedicated UI */}
+          {/* <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                 {t('options_general_replayHistoricalTasks')}
@@ -244,7 +245,7 @@ export const GeneralSettings = ({ isDarkMode = false }: GeneralSettingsProps) =>
                 <span className="sr-only">{t('options_general_replayHistoricalTasks')}</span>
               </label>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </section>
