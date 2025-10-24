@@ -13,7 +13,10 @@ Verse is an AI-powered browser automation tool that can:
 
 ## Demo Video
 
-https://github.com/shreyasgurav/Verse/raw/main/verse-demo.mp4
+<video width="100%" controls>
+  <source src="https://github.com/shreyasgurav/Verse/raw/main/verse-demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 *Watch Verse in action - see how our multi-agent system automates complex web tasks*
 
