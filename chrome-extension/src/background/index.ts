@@ -303,7 +303,8 @@ chrome.runtime.onConnect.addListener(port => {
           case 'screenshot': {
             if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
             const browserContext = getOrCreateBrowserContext(message.tabId);
-            const page = await browserContext.switchTab(message.tabId);
+            // Do not switch/activate tab; attach silently
+            const page = await browserContext.getPageForTab(message.tabId);
             const screenshot = await page.takeScreenshot();
             logger.info('screenshot', message.tabId, screenshot);
             return port.postMessage({ type: 'success', screenshot });

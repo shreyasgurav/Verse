@@ -112,16 +112,10 @@ export default class BrowserContext {
       let activeTab: chrome.tabs.Tab;
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) {
-        // open a new tab with blank page
-        const newTab = await chrome.tabs.create({ url: this._config.homePageUrl });
-        if (!newTab.id) {
-          // this should rarely happen
-          throw new Error('No tab ID available');
-        }
-        activeTab = newTab;
-      } else {
-        activeTab = tab;
+        // Do NOT create a new tab automatically
+        throw new Error('No active tab available to attach');
       }
+      activeTab = tab;
       logger.info('active tab', activeTab.id, activeTab.url, activeTab.title);
       logger.warning('⚠️ Using fallback active tab - this may cause incorrect tab association');
       const page = await this._getOrCreatePage(activeTab);
@@ -270,10 +264,6 @@ export default class BrowserContext {
     void analytics.trackDomainVisit(url);
 
     const page = await this.getCurrentPage();
-    if (!page) {
-      await this.openTab(url);
-      return;
-    }
     // if page is attached, use puppeteer to navigate to the url
     if (page.attached) {
       await page.navigateTo(url);
@@ -336,16 +326,31 @@ export default class BrowserContext {
   }
 
   public async getTabInfos(): Promise<TabInfo[]> {
-    const tabs = await chrome.tabs.query({});
-    const tabInfos: TabInfo[] = [];
+    // Only expose the current tab to the agent to avoid cross-tab leakage
+    // This ensures the agent doesn't decide a site is already open in another tab
+    if (this._currentTabId) {
+      try {
+        const tab = await chrome.tabs.get(this._currentTabId);
+        if (tab.id && tab.url && tab.title) {
+          return [
+            {
+              id: tab.id,
+              url: tab.url,
+              title: tab.title,
+            },
+          ];
+        }
+      } catch {
+        // Fallback to window query below if get() fails
+      }
+    }
 
+    // Fallback: only tabs from current window (still avoids other windows)
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    const tabInfos: TabInfo[] = [];
     for (const tab of tabs) {
       if (tab.id && tab.url && tab.title) {
-        tabInfos.push({
-          id: tab.id,
-          url: tab.url,
-          title: tab.title,
-        });
+        tabInfos.push({ id: tab.id, url: tab.url, title: tab.title });
       }
     }
     return tabInfos;
