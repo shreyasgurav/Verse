@@ -1,0 +1,148 @@
+/* Privacy Policy Styles - Matching Verse Settings Design */
+.privacy-policy {
+  min-height: 100vh;
+  background-color: #242424;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #242424;
+}
+
+html {
+  margin: 0;
+  padding: 0;
+  background-color: #242424;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+  line-height: 1.6;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid #374151;
+}
+
+.header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #ffffff;
+}
+
+.subtitle {
+  font-size: 1.25rem;
+  color: #9ca3af;
+  margin-bottom: 1rem;
+}
+
+.last-updated {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.content {
+  margin-bottom: 3rem;
+}
+
+.section {
+  margin-bottom: 2.5rem;
+}
+
+.section h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #ffffff;
+  border-left: 4px solid #3b82f6;
+  padding-left: 1rem;
+}
+
+.section p {
+  margin-bottom: 1rem;
+  color: #d1d5db;
+}
+
+.section ul {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.section li {
+  margin-bottom: 0.5rem;
+  color: #d1d5db;
+}
+
+.section strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.section a {
+  color: #3b82f6;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.section a:hover {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.footer {
+  text-align: center;
+  padding-top: 2rem;
+  border-top: 1px solid #374151;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
+  
+  .header h1 {
+    font-size: 2rem;
+  }
+  
+  .subtitle {
+    font-size: 1.125rem;
+  }
+  
+  .section h2 {
+    font-size: 1.25rem;
+  }
+}
+
+/* Dark mode enhancements */
+@media (prefers-color-scheme: dark) {
+  .privacy-policy {
+    background-color: #1a1a1a;
+  }
+  
+  .section h2 {
+    border-left-color: #60a5fa;
+  }
+  
+  .section a {
+    color: #60a5fa;
+  }
+  
+  .section a:hover {
+    color: #93c5fd;
+  }
+}
