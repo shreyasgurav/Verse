@@ -160,7 +160,7 @@ export default class Page {
       // This prevents JavaScript from opening new tabs/windows
       const originalOpen = window.open;
       window.open = function(url, target, features) {
-        console.log('[Nanobrowser] Blocked window.open, navigating same tab:', url);
+        console.log('[Verse] Blocked window.open, navigating same tab:', url);
         if (url) {
           window.location.href = url;
         }
@@ -178,13 +178,13 @@ export default class Page {
         if (anchor) {
           // Remove target attribute
           if (anchor.target && anchor.target !== '_self') {
-            console.log('[Nanobrowser] Click intercepted: Removed target="' + anchor.target + '"');
+            console.log('[Verse] Click intercepted: Removed target="' + anchor.target + '"');
             anchor.target = '_self';
           }
           
           // Prevent default if it would open new tab (modifier keys or middle click)
           if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) {
-            console.log('[Nanobrowser] Click intercepted: Blocked modifier keys/middle-click');
+            console.log('[Verse] Click intercepted: Blocked modifier keys/middle-click');
             e.preventDefault();
             e.stopImmediatePropagation();
             
@@ -203,7 +203,7 @@ export default class Page {
         const anchor = target instanceof HTMLAnchorElement ? target : target.closest('a');
         
         if (anchor && (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1)) {
-          console.log('[Nanobrowser] Mousedown intercepted: Blocked modifier keys/middle-click');
+          console.log('[Verse] Mousedown intercepted: Blocked modifier keys/middle-click');
           e.preventDefault();
           e.stopImmediatePropagation();
           return false;
@@ -1433,7 +1433,7 @@ export default class Page {
           const originalTarget = el.target;
           if (originalTarget) {
             el.removeAttribute('target');
-            console.log(`[Nanobrowser] Removed target="${originalTarget}" to force same-tab navigation`);
+            console.log(`[Verse] Removed target="${originalTarget}" to force same-tab navigation`);
           }
           // Also remove any rel="noopener" or rel="noreferrer" that might affect behavior
           if (el.rel) {
@@ -1445,7 +1445,7 @@ export default class Page {
           const onclickStr = el.getAttribute('onclick');
           if (onclickStr && (onclickStr.includes('window.open') || onclickStr.includes('_blank'))) {
             el.removeAttribute('onclick');
-            console.log('[Nanobrowser] Removed onclick with window.open to force same-tab navigation');
+            console.log('[Verse] Removed onclick with window.open to force same-tab navigation');
           }
         }
       });
