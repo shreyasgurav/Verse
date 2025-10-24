@@ -11,6 +11,12 @@ Verse is an AI-powered browser automation tool that can:
 - Perform complex multi-step tasks
 - Answer questions about web content
 
+## Demo Video
+
+https://github.com/shreyasgurav/VerseBrowser/blob/main/verse-demo.mp4
+
+*Watch Verse in action - see how our multi-agent system automates complex web tasks*
+
 ## Key Features
 
 - **Multi-Agent System**: Specialized AI agents (Planner, Navigator, Validator) work together
