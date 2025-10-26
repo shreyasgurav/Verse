@@ -17,6 +17,7 @@ export const DEFAULT_INCLUDE_ATTRIBUTES = [
   'aria-label',
   'aria-expanded',
   'href',
+  'data-answered',
 ];
 
 export abstract class DOMBaseNode {

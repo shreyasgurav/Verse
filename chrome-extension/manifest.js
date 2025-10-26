@@ -94,6 +94,15 @@ const manifest = withOperaSidebar(
         matches: ['*://*/*'],
       },
     ],
+    commands: {
+      _execute_action: {
+        description: 'Activate the extension',
+        suggested_key: {
+          mac: 'Command+I',
+          windows: 'Ctrl+I'
+        }
+      }
+    },
   }),
 );
 

@@ -452,6 +452,48 @@ function _constructDomTree(evalPage: BuildDomTreeResult): [DOMElementNode, Map<n
     throw new Error('Failed to parse HTML to dictionary');
   }
 
+  // Annotate answered state for common form controls
+  try {
+    const annotateAnswered = (el: DOMElementNode) => {
+      try {
+        const tag = (el.tagName || '').toLowerCase();
+        const role = (el.attributes['role'] || '').toLowerCase();
+        const type = (el.attributes['type'] || '').toLowerCase();
+        const ariaChecked = (el.attributes['aria-checked'] || '').toLowerCase();
+        const value = (el.attributes['value'] || '').trim();
+
+        // Radio/checkbox option answered
+        if (role === 'radio' || type === 'radio' || role === 'checkbox' || type === 'checkbox') {
+          if (ariaChecked === 'true') {
+            el.attributes['data-answered'] = 'true';
+          }
+        }
+
+        // Text-like inputs answered (non-empty value)
+        const isTextInput =
+          tag === 'input' || tag === 'textarea' || role === 'textbox' || type === 'text' || type === 'email' ||
+          type === 'number' || type === 'url' || type === 'tel' || type === 'search' || type === 'date';
+        if (isTextInput && value.length > 0) {
+          el.attributes['data-answered'] = 'true';
+        }
+
+        // Select-like controls (combobox/listbox) with value
+        if ((role === 'combobox' || role === 'listbox' || tag === 'select') && value.length > 0) {
+          el.attributes['data-answered'] = 'true';
+        }
+      } catch {
+        // best-effort; ignore errors per node
+      }
+      // Recurse children
+      for (const child of el.children) {
+        if (child instanceof DOMElementNode) annotateAnswered(child);
+      }
+    };
+    annotateAnswered(htmlToDict);
+  } catch (e) {
+    logger.debug('Annotate answered failed:', e);
+  }
+
   return [htmlToDict, selectorMap];
 }
 
