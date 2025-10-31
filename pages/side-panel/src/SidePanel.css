@@ -86,6 +86,59 @@ code {
   opacity: 1;
 }
 
+/* Instant tooltip for header icons */
+.instant-tooltip {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.group:hover .instant-tooltip {
+  opacity: 1; /* show instantly with no delay */
+}
+
+/* Tab chip above input */
+.tab-chip {
+  display: flex;
+  align-items: center;
+  width: calc(100% - 50px); /* narrower, centered */
+  margin: 8px auto 0 auto; /* align with input padding */
+  background-color: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-bottom: none; /* connect to input */
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding: 6px 12px;
+  color: #e5e7eb;
+  position: relative;
+  z-index: 2;
+}
+
+.tab-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* Slight overlap so chip visually connects with input */
+.chat-input-container {
+  margin-top: 0; /* pull input up under the chip more */
+  padding-top: 0; /* remove top padding gap */
+}
+
 .send-button {
   color: #19C2FF;
   cursor: pointer;

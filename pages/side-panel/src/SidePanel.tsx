@@ -112,6 +112,7 @@ const SidePanel = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const setInputTextRef = useRef<((text: string) => void) | null>(null);
   const taskTimeoutRef = useRef<number | null>(null);
+  const [currentTabMeta, setCurrentTabMeta] = useState<{ title: string; icon?: string; url?: string } | null>(null);
   
   // Tab-specific state
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
@@ -202,6 +203,12 @@ const SidePanel = () => {
           
           setCurrentTabId(tabId);
           tabIdRef.current = tabId;
+          try {
+            const tab = await chrome.tabs.get(tabId);
+            setCurrentTabMeta({ title: tab.title || '', icon: tab.favIconUrl, url: tab.url });
+          } catch (e) {
+            setCurrentTabMeta(null);
+          }
           
           // CRITICAL: Reset all UI states for new tab
           setShowStopButton(false);
@@ -339,6 +346,14 @@ const SidePanel = () => {
         
         // Reinitialize with new tab
         await initializeTabContext(newTabId);
+
+        // Update tab meta (title/icon/url)
+        try {
+          const tab = await chrome.tabs.get(newTabId);
+          setCurrentTabMeta({ title: tab.title || '', icon: tab.favIconUrl, url: tab.url });
+        } catch (e) {
+          setCurrentTabMeta(null);
+        }
         
         // Restore input text for the new tab (if exists)
         const savedText = tabInputTextRef.current.get(newTabId) || '';
@@ -353,10 +368,18 @@ const SidePanel = () => {
     
     // Add listener
     chrome.tabs.onActivated.addListener(handleTabActivated);
+    // Keep metadata in sync on URL/title/icon changes within the same tab
+    const handleUpdated = (tabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
+      if (tabId === tabIdRef.current) {
+        setCurrentTabMeta({ title: tab.title || '', icon: tab.favIconUrl, url: tab.url });
+      }
+    };
+    chrome.tabs.onUpdated.addListener(handleUpdated);
     
     // Cleanup
     return () => {
       chrome.tabs.onActivated.removeListener(handleTabActivated);
+      chrome.tabs.onUpdated.removeListener(handleUpdated);
     };
   }, [initializeTabContext]);
 
@@ -1462,6 +1485,24 @@ const SidePanel = () => {
             )}
           </div>
           <div className="header-icons">
+            <div className="relative group">
+            <button
+              type="button"
+              onClick={() => handleSendMessage('Summarize the current page. Extract full-page readable content and provide a concise summary.', 'Summarize page')}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  handleSendMessage('Summarize the current page. Extract full-page readable content and provide a concise summary.', 'Summarize page');
+                }
+              }}
+              className={`header-icon text-white hover:text-white cursor-pointer`}
+              aria-label={'Summarize page'}
+              tabIndex={0}>
+              <span className="material-symbols-outlined" style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
+                segment
+              </span>
+            </button>
+            <span className="instant-tooltip">Summarize page</span>
+            </div>
             <button
               type="button"
               onClick={() => chrome.runtime.openOptionsPage()}
@@ -1555,9 +1596,19 @@ const SidePanel = () => {
                   </div>
                 )}
                 
+                {/* Tab chip above input */}
+                {currentTabMeta && currentTabMeta.url && !['about:blank','chrome://new-tab-page','chrome://new-tab-page/'].includes(currentTabMeta.url) && (
+                  <div className="tab-chip">
+                    {currentTabMeta.icon && (
+                      <img src={currentTabMeta.icon} alt="" style={{ width: 16, height: 16, borderRadius: 3, marginRight: 8 }} />
+                    )}
+                    <span className="tab-chip-title">{currentTabMeta.title || 'This page'}</span>
+                  </div>
+                )}
+
                 {/* Chat input always at bottom */}
                 <div
-                  className={`p-2 shadow-sm backdrop-blur-sm`}>
+                  className={`chat-input-container p-2 shadow-sm backdrop-blur-sm`}>
                   <ChatInput
                     onSendMessage={handleSendMessage}
                     onStopTask={handleStopTask}
