@@ -18,6 +18,7 @@ import { DEFAULT_AGENT_OPTIONS } from './agent/types';
 import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
+import { summarizePage, cleanupAfterSummarize } from './services/summarize';
 
 const logger = createLogger('background');
 
@@ -364,6 +365,113 @@ chrome.runtime.onConnect.addListener(port => {
             const page = await browserContext.getCurrentPage();
             await page.removeHighlight();
             return port.postMessage({ type: 'success', msg: t('bg_cmd_nohighlight_ok') });
+          }
+
+          case 'summarize_page': {
+            try {
+              const tabId = message.tabId as number;
+              if (!tabId) {
+                return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
+              }
+
+              const sessionId = message.taskId as string;
+              const browserContext = getOrCreateBrowserContext(tabId);
+
+              // Apply user's display settings to browser context
+              const generalSettings = await generalSettingsStore.getSettings();
+              browserContext.updateConfig({
+                displayHighlights: generalSettings.displayHighlights,
+              });
+
+              // Helper to send progress updates to UI
+              const sendProgress = (msg: string) => {
+                const targetPort = tabPorts.get(tabId);
+                if (targetPort) {
+                  targetPort.postMessage({
+                    type: EventType.EXECUTION,
+                    actor: Actors.SYSTEM,
+                    state: ExecutionState.STEP_OK,
+                    timestamp: Date.now(),
+                    data: { taskId: sessionId, step: 1, maxSteps: 2, details: msg, messageType: 'thinking' },
+                  });
+                }
+              };
+
+              // Call summarize service
+              const result = await summarizePage({
+                tabId,
+                sessionId,
+                browserContext,
+                onProgress: sendProgress,
+              });
+
+              // Save summary to chat history
+              logger.info('Saving summary...');
+              const { createChatHistoryStorage } = await import('@extension/storage');
+              const chatStore = createChatHistoryStorage(tabId);
+              
+              await chatStore.addMessage(result.sessionId, {
+                actor: Actors.SYSTEM,
+                content: result.summary,
+                timestamp: Date.now(),
+                messageType: 'assistant',
+                taskId: result.sessionId,
+              });
+              logger.info('Summary saved to storage');
+
+              // Send result to UI - ALWAYS send the event even if port seems unavailable
+              // The side panel will reload from storage if needed
+              const targetPort = tabPorts.get(tabId);
+              if (targetPort) {
+                try {
+                  targetPort.postMessage(result.event);
+                  logger.info('Summary result sent to UI via port');
+                } catch (portError) {
+                  logger.error('Failed to send summary via port:', portError);
+                }
+              } else {
+                logger.warning(`No port found for tab ${tabId} - summary saved to storage, UI will reload`);
+              }
+              
+              // ALWAYS send a completion signal via chrome.runtime to ensure UI updates
+              // This broadcasts to all listeners including the side panel
+              try {
+                chrome.runtime.sendMessage({
+                  type: 'summarize_complete',
+                  tabId,
+                  sessionId: result.sessionId,
+                }).catch((err) => {
+                  // Ignore "no receivers" error - side panel might not be open
+                  logger.debug('Runtime message not received (side panel may be closed):', err);
+                });
+                logger.info('Sent summarize_complete broadcast');
+              } catch (broadcastError) {
+                logger.warning('Could not broadcast summarize_complete:', broadcastError);
+              }
+              
+              // Cleanup: Remove highlights and detach debugger
+              await cleanupAfterSummarize(browserContext, tabId);
+              
+            } catch (error) {
+              const errorMsg = error instanceof Error ? error.message : String(error);
+              logger.error('summarize_page failed:', errorMsg, error);
+              
+              // Cleanup on error too
+              try {
+                const tabId = message.tabId as number;
+                if (tabId) {
+                  const browserContext = tabBrowserContexts.get(tabId);
+                  if (browserContext) {
+                    await cleanupAfterSummarize(browserContext, tabId);
+                  }
+                }
+              } catch (cleanupError) {
+                logger.warning('Error cleanup failed:', cleanupError);
+              }
+              
+              return port.postMessage({ type: 'error', error: `Failed: ${errorMsg}. Check console.` });
+            }
+            break;
           }
 
           case 'speech_to_text': {

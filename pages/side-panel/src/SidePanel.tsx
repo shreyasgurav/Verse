@@ -5,7 +5,7 @@ import { type Message, Actors, chatHistoryStore, agentModelStore, generalSetting
 import favoritesStorage, { type FavoritePrompt } from '@extension/storage/lib/prompt/favorites';
 import { t } from '@extension/i18n';
 import MessageList from './components/MessageList';
-import ChatInput from './components/ChatInput';
+import InputSection from './components/input';
 import ChatHistoryList from './components/ChatHistoryList';
 import BookmarkList from './components/BookmarkList';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
@@ -659,6 +659,27 @@ const SidePanel = () => {
     };
   }, [showStopButton, reloadCurrentSession]);
 
+  // Listen for summarize_complete messages from background
+  useEffect(() => {
+    const handleRuntimeMessage = (message: any) => {
+      if (message.type === 'summarize_complete' && message.sessionId) {
+        console.log('📨 Received summarize_complete signal, reloading session');
+        // Reload the session to show the summary
+        reloadCurrentSession();
+        // Reset UI state
+        setShowStopButton(false);
+        setInputEnabled(true);
+        setCurrentTaskState('idle');
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+    
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
+    };
+  }, [reloadCurrentSession]);
+
   const appendMessage = useCallback((newMessage: Message, sessionId?: string | null) => {
     const isProgressMessage = newMessage.content === progressMessage;
 
@@ -732,15 +753,29 @@ const SidePanel = () => {
       if (isFinal) {
         setCurrentTaskState('complete');
         
-        // DON'T add final message here - it's saved by background script to storage
-        // The polling mechanism will load it from storage automatically
-        // This prevents duplicate final messages
-        
-        // Just remove progress messages (3 dots)
+        // Remove progress messages and add final message immediately
         setMessages(prev => {
-          return prev.filter(
+          const filtered = prev.filter(
             msg => !(msg.taskId === data.taskId && msg.messageType === 'progress')
           );
+          
+          // Add final message if content exists and not already present
+          if (content && content.trim().length > 0) {
+            const alreadyHasFinal = filtered.some(
+              m => m.messageType === 'assistant' && m.content === content && m.taskId === data.taskId
+            );
+            if (!alreadyHasFinal) {
+              filtered.push({
+                actor: Actors.SYSTEM,
+                content: content,
+                timestamp: timestamp || Date.now(),
+                messageType: 'assistant',
+                taskId: data.taskId,
+              });
+            }
+          }
+          
+          return filtered;
         });
         
         // ALWAYS clear state and update UI, even if no content
@@ -760,7 +795,14 @@ const SidePanel = () => {
           switch (state) {
             case ExecutionState.TASK_OK:
             case ExecutionState.TASK_FAIL:
-              setIsFollowUpMode(true);
+              // If the source is summarize, do not enter follow-up mode (no executor involved)
+              if ((data as any)?.source === 'summarize') {
+                setIsFollowUpMode(false);
+                console.log('✅ Summarize complete - follow-up mode disabled');
+              } else {
+                setIsFollowUpMode(true);
+                console.log('✅ Task complete - follow-up mode enabled');
+              }
               setInputEnabled(true);
               setShowStopButton(false); // ← This must always run!
               setIsReplaying(false);
@@ -1096,6 +1138,51 @@ const SidePanel = () => {
       }
 
       // Handle different commands
+      if (command === '/summarize_page') {
+        // Ensure we have a session
+        const tabId = tabIdRef.current;
+        if (!tabId) throw new Error('Tab ID not initialized');
+        if (!tabChatHistoryStore) throw new Error('Chat history store not initialized');
+
+        if (!sessionIdRef.current) {
+          const newSession = await tabChatHistoryStore.createSession('Summarize page');
+          setCurrentSessionId(newSession.id);
+          sessionIdRef.current = newSession.id;
+        }
+
+        // Append user-visible command message
+        appendMessage({
+          actor: Actors.USER,
+          content: 'Summarize page',
+          timestamp: Date.now(),
+        }, sessionIdRef.current);
+
+        // Add progress message (3 dots) immediately
+        setMessages(prev => [
+          ...prev,
+          {
+            actor: Actors.SYSTEM,
+            content: progressMessage,
+            timestamp: Date.now(),
+            messageType: 'progress',
+            taskId: sessionIdRef.current,
+          } as Message,
+        ]);
+
+        // Update UI state while summarizing
+        setIsFollowUpMode(false);
+        setInputEnabled(false);
+        setShowStopButton(true);
+        setCurrentTaskState('thinking');
+
+        // Ask background to summarize directly
+        portRef.current?.postMessage({
+          type: 'summarize_page',
+          tabId,
+          taskId: sessionIdRef.current,
+        });
+        return true;
+      }
       if (command === '/state') {
         portRef.current?.postMessage({
           type: 'state',
@@ -1488,10 +1575,10 @@ const SidePanel = () => {
             <div className="relative group">
             <button
               type="button"
-              onClick={() => handleSendMessage('Summarize the current page. Extract full-page readable content and provide a concise summary.', 'Summarize page')}
+              onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
-                  handleSendMessage('Summarize the current page. Extract full-page readable content and provide a concise summary.', 'Summarize page');
+                  handleSendMessage('/summarize_page', 'Summarize page');
                 }
               }}
               className={`header-icon text-white hover:text-white cursor-pointer`}
@@ -1596,35 +1683,22 @@ const SidePanel = () => {
                   </div>
                 )}
                 
-                {/* Tab chip above input */}
-                {currentTabMeta && currentTabMeta.url && !['about:blank','chrome://new-tab-page','chrome://new-tab-page/'].includes(currentTabMeta.url) && (
-                  <div className="tab-chip">
-                    {currentTabMeta.icon && (
-                      <img src={currentTabMeta.icon} alt="" style={{ width: 16, height: 16, borderRadius: 3, marginRight: 8 }} />
-                    )}
-                    <span className="tab-chip-title">{currentTabMeta.title || 'This page'}</span>
-                  </div>
-                )}
-
-                {/* Chat input always at bottom */}
-                <div
-                  className={`chat-input-container p-2 shadow-sm backdrop-blur-sm`}>
-                  <ChatInput
-                    onSendMessage={handleSendMessage}
-                    onStopTask={handleStopTask}
-                    disabled={!inputEnabled || isHistoricalSession}
-                    showStopButton={showStopButton}
-                    setContent={setter => {
-                      setInputTextRef.current = setter;
-                    }}
-                    onTextChange={(text: string) => {
-                      currentInputTextRef.current = text;
-                    }}
-                    isDarkMode={isDarkMode}
-                    historicalSessionId={isHistoricalSession && replayEnabled ? currentSessionId : null}
-                    onReplay={handleReplay}
-                  />
-                </div>
+                <InputSection
+                  currentTabMeta={currentTabMeta}
+                  inputEnabled={inputEnabled}
+                  isHistoricalSession={isHistoricalSession}
+                  showStopButton={showStopButton}
+                  setInputTextRef={setInputTextRef}
+                  onSendMessage={handleSendMessage}
+                  onStopTask={handleStopTask}
+                  onTextChange={(text: string) => {
+                    currentInputTextRef.current = text;
+                  }}
+                  isDarkMode={isDarkMode}
+                  currentSessionId={currentSessionId}
+                  replayEnabled={replayEnabled}
+                  onReplay={handleReplay}
+                />
               </>
             )}
           </>

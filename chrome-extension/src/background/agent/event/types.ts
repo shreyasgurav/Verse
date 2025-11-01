@@ -60,6 +60,7 @@ export interface EventData {
   // NEW FIELDS for thinking UI
   messageType?: 'thinking' | 'final'; // Classify if reasoning or user-facing
   isFinalAnswer?: boolean; // Mark final results
+  source?: 'summarize' | 'agent'; // Source of the event (for UI routing)
 }
 
 export class AgentEvent {
