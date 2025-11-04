@@ -107,6 +107,7 @@ const SidePanel = () => {
   const currentThinkingRef = useRef<ThinkingStep[]>([]);
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
+  const lastTaskSourceRef = useRef<'summarize' | 'agent' | null>(null);
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -659,27 +660,6 @@ const SidePanel = () => {
     };
   }, [showStopButton, reloadCurrentSession]);
 
-  // Listen for summarize_complete messages from background
-  useEffect(() => {
-    const handleRuntimeMessage = (message: any) => {
-      if (message.type === 'summarize_complete' && message.sessionId) {
-        console.log('📨 Received summarize_complete signal, reloading session');
-        // Reload the session to show the summary
-        reloadCurrentSession();
-        // Reset UI state
-        setShowStopButton(false);
-        setInputEnabled(true);
-        setCurrentTaskState('idle');
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
-    
-    return () => {
-      chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
-    };
-  }, [reloadCurrentSession]);
-
   const appendMessage = useCallback((newMessage: Message, sessionId?: string | null) => {
     const isProgressMessage = newMessage.content === progressMessage;
 
@@ -753,29 +733,15 @@ const SidePanel = () => {
       if (isFinal) {
         setCurrentTaskState('complete');
         
-        // Remove progress messages and add final message immediately
+        // DON'T add final message here - it's saved by background script to storage
+        // The polling mechanism will load it from storage automatically
+        // This prevents duplicate final messages
+        
+        // Just remove progress messages (3 dots)
         setMessages(prev => {
-          const filtered = prev.filter(
+          return prev.filter(
             msg => !(msg.taskId === data.taskId && msg.messageType === 'progress')
           );
-          
-          // Add final message if content exists and not already present
-          if (content && content.trim().length > 0) {
-            const alreadyHasFinal = filtered.some(
-              m => m.messageType === 'assistant' && m.content === content && m.taskId === data.taskId
-            );
-            if (!alreadyHasFinal) {
-              filtered.push({
-                actor: Actors.SYSTEM,
-                content: content,
-                timestamp: timestamp || Date.now(),
-                messageType: 'assistant',
-                taskId: data.taskId,
-              });
-            }
-          }
-          
-          return filtered;
         });
         
         // ALWAYS clear state and update UI, even if no content
@@ -795,14 +761,7 @@ const SidePanel = () => {
           switch (state) {
             case ExecutionState.TASK_OK:
             case ExecutionState.TASK_FAIL:
-              // If the source is summarize, do not enter follow-up mode (no executor involved)
-              if ((data as any)?.source === 'summarize') {
-                setIsFollowUpMode(false);
-                console.log('✅ Summarize complete - follow-up mode disabled');
-              } else {
-                setIsFollowUpMode(true);
-                console.log('✅ Task complete - follow-up mode enabled');
-              }
+              setIsFollowUpMode(true);
               setInputEnabled(true);
               setShowStopButton(false); // ← This must always run!
               setIsReplaying(false);
@@ -1139,6 +1098,8 @@ const SidePanel = () => {
 
       // Handle different commands
       if (command === '/summarize_page') {
+        // Mark source so follow-ups don't try to reuse a non-existent executor
+        lastTaskSourceRef.current = 'summarize';
         // Ensure we have a session
         const tabId = tabIdRef.current;
         if (!tabId) throw new Error('Tab ID not initialized');
@@ -1175,7 +1136,7 @@ const SidePanel = () => {
         setShowStopButton(true);
         setCurrentTaskState('thinking');
 
-        // Ask background to summarize directly
+        // Ask background to summarize directly (bypass agent)
         portRef.current?.postMessage({
           type: 'summarize_page',
           tabId,
@@ -1183,6 +1144,7 @@ const SidePanel = () => {
         });
         return true;
       }
+
       if (command === '/state') {
         portRef.current?.postMessage({
           type: 'state',
@@ -1322,7 +1284,8 @@ const SidePanel = () => {
       }
 
       // Send message using the utility function
-      if (isFollowUpMode) {
+      const shouldFollowUp = isFollowUpMode && lastTaskSourceRef.current !== 'summarize';
+      if (shouldFollowUp) {
         // Send as follow-up task
         await sendMessage({
           type: 'follow_up_task',
@@ -1340,6 +1303,7 @@ const SidePanel = () => {
           tabId,
         });
         console.log('new_task sent', text, tabId, sessionIdRef.current);
+        lastTaskSourceRef.current = 'agent';
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -1554,6 +1518,27 @@ const SidePanel = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Listen for summarize_complete messages from background (runtime channel)
+  useEffect(() => {
+    const handleRuntimeMessage = (message: any) => {
+      if (message && message.type === 'summarize_complete' && message.sessionId) {
+        console.log('📨 Received summarize_complete signal, reloading session');
+        // Reload the session to show the summary
+        reloadCurrentSession();
+        // Reset UI state
+        setShowStopButton(false);
+        setInputEnabled(true);
+        setCurrentTaskState('idle');
+        // Do NOT enter follow-up mode after summarize; send new tasks instead
+        setIsFollowUpMode(false);
+        lastTaskSourceRef.current = 'summarize';
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+    return () => chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
+  }, [reloadCurrentSession]);
 
   return (
     <div>

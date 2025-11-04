@@ -29,7 +29,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsConfig = {
   useVision: false,
   useVisionForPlanner: false,
   planningInterval: 3,
-  displayHighlights: true,
+  displayHighlights: false,
   minWaitPageLoad: 250,
   replayHistoricalTasks: false,
 };
