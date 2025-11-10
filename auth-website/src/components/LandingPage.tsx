@@ -104,6 +104,12 @@ export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: La
               >
                 Download for Chrome
               </a>
+              <button 
+                onClick={onSignIn}
+                className="btn-signin-google"
+              >
+                Sign in with Google
+              </button>
             </div>
           </div>
         </div>

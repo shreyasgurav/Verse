@@ -156,7 +156,7 @@
   font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
-  font-size: clamp(40px, 8vw, 80px);
+  font-size: clamp(48px, 9vw, 96px);
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: -0.04em;
@@ -170,25 +170,25 @@
 
 @media (min-width: 640px) {
   .hero-title {
-    font-size: 48px;
+    font-size: 56px;
   }
 }
 
 @media (min-width: 768px) {
   .hero-title {
-    font-size: 56px;
+    font-size: 68px;
   }
 }
 
 @media (min-width: 1024px) {
   .hero-title {
-    font-size: 64px;
+    font-size: 80px;
   }
 }
 
 @media (min-width: 1280px) {
   .hero-title {
-    font-size: 72px;
+    font-size: 96px;
   }
 }
 
@@ -245,7 +245,7 @@
   background: #000;
   color: #fff;
   border: none;
-  border-radius: 10px;
+  border-radius: 14px;
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;
@@ -256,6 +256,23 @@
 
 .btn-download:hover {
   opacity: 0.85;
+}
+
+.btn-signin-google {
+  padding: 12px 24px;
+  background: transparent;
+  color: #1d1d1f;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-signin-google:hover {
+  border-color: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 /* Demo Section */
