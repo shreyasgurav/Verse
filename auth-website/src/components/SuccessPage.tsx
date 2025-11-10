@@ -29,7 +29,7 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
             data: authData,
             openSidePanel: true, // Request to open side panel
           },
-          (response) => {
+          (response?: unknown) => {
             if (chrome.runtime.lastError) {
               console.log('Extension message error:', chrome.runtime.lastError.message);
               setMessage('Authentication successful! Please return to Verse and open the side panel.');

@@ -39,7 +39,7 @@ function App() {
             data: userData,
             openSidePanel: true, // Request to open side panel
           },
-          (response) => {
+          (response?: unknown) => {
             if (chrome.runtime.lastError) {
               console.error('[Auth] Error sending auth message:', chrome.runtime.lastError.message);
             } else {
@@ -113,7 +113,7 @@ function App() {
                 data: userData,
                 openSidePanel: true,
               },
-              (response) => {
+              (response?: unknown) => {
                 if (chrome.runtime.lastError) {
                   console.error('[Auth] Error sending auth message from sign-in:', chrome.runtime.lastError.message);
                 } else {
@@ -154,7 +154,7 @@ function App() {
             {
               type: 'VERSE_AUTH_SIGNOUT',
             },
-            (response) => {
+            (response?: unknown) => {
               if (chrome.runtime.lastError) {
                 console.error('[Auth] Error sending sign out message:', chrome.runtime.lastError.message);
               } else {
