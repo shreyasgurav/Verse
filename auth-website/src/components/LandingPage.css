@@ -932,6 +932,10 @@
     width: auto;
   }
 
+  .footer {
+    padding: 30px 0;
+  }
+
   .footer-logo img {
     height: 70px;
   }
