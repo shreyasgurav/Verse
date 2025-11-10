@@ -188,10 +188,44 @@ analyticsSettingsStore.subscribe(() => {
 });
 
 // Listen for simple messages (e.g., from options page)
-chrome.runtime.onMessage.addListener(() => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'CLOSE_SIDE_PANEL') {
+    const targetTabId = message.tabId;
+    if (targetTabId) {
+      // Disable and re-enable the side panel to close it
+      (async () => {
+        try {
+          await chrome.sidePanel.setOptions({
+            tabId: targetTabId,
+            enabled: false
+          });
+          logger.info(`[background] Side panel closed for tab: ${targetTabId}`);
+          
+          // Re-enable after a delay
+          setTimeout(async () => {
+            try {
+              await chrome.sidePanel.setOptions({
+                tabId: targetTabId,
+                enabled: true
+              });
+              logger.info(`[background] Side panel re-enabled for tab: ${targetTabId}`);
+            } catch (e) {
+              logger.error('[background] Error re-enabling side panel:', e);
+            }
+          }, 200);
+          
+          sendResponse({ success: true });
+        } catch (error) {
+          logger.error('[background] Error closing side panel:', error);
+          sendResponse({ success: false, error: String(error) });
+        }
+      })();
+      return true; // Keep channel open for async response
+    }
+  }
+  
   // Handle other message types if needed in the future
-  // Return false if response is not sent asynchronously
-  // return false;
+  return false;
 });
 
 // Setup connection listener for long-lived connections (e.g., side panel)
@@ -575,16 +609,57 @@ chrome.runtime.onConnect.addListener(port => {
 });
 
 async function setupExecutor(taskId: string, task: string, browserContext: BrowserContext, tabId: number) {
-  const providers = await llmProviderStore.getAllProviders();
-  // if no providers, need to display the options page
-  if (Object.keys(providers).length === 0) {
+  // Check if user is authenticated
+  const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
+  const isUserAuthenticated = authResult.isAuthenticated === true && authResult.userId;
+  
+  let providers = await llmProviderStore.getAllProviders();
+  let agentModels = await agentModelStore.getAllAgentModels();
+  
+  // If user is authenticated and no providers configured, use default API keys
+  if (isUserAuthenticated && Object.keys(providers).length === 0) {
+    logger.info('[background] Using default API keys for authenticated user');
+    
+    // Create default provider configuration with your API key
+    const defaultProvider = {
+      name: 'OpenAI (Default)',
+      type: 'openai' as any,
+      apiKey: import.meta.env.VITE_DEFAULT_OPENAI_API_KEY || '', // Your API key from env
+      modelNames: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'],
+      createdAt: Date.now(),
+    };
+    
+    providers = {
+      'openai-default': defaultProvider,
+    };
+    
+    // Create default agent models using gpt-4o-mini
+    agentModels = {
+      [AgentNameEnum.Navigator]: {
+        provider: 'openai-default',
+        modelName: 'gpt-4o-mini',
+        parameters: {
+          temperature: 0.1,
+          maxTokens: 4096,
+        },
+      },
+      [AgentNameEnum.Planner]: {
+        provider: 'openai-default',
+        modelName: 'gpt-4o-mini',
+        parameters: {
+          temperature: 0.1,
+          maxTokens: 4096,
+        },
+      },
+    };
+  } else if (Object.keys(providers).length === 0) {
+    // No providers and not authenticated
     throw new Error(t('bg_setup_noApiKeys'));
   }
 
   // Clean up any legacy validator settings for backward compatibility
   await agentModelStore.cleanupLegacyValidatorSettings();
 
-  const agentModels = await agentModelStore.getAllAgentModels();
   // verify if every provider used in the agent models exists in the providers
   for (const agentModel of Object.values(agentModels)) {
     if (!providers[agentModel.provider]) {
@@ -844,3 +919,83 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
     }
   });
 }
+
+// Listen for auth messages from the auth website
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  logger.info('[background] External message received:', message.type, sender?.url);
+  
+  if (message.type === 'VERSE_AUTH_SUCCESS' && message.data) {
+    const { userId, email, name } = message.data;
+    const shouldOpenSidePanel = message.openSidePanel === true;
+    
+    // Store auth data in chrome.storage
+    chrome.storage.local.set({
+      userId,
+      userEmail: email,
+      userName: name,
+      isAuthenticated: true,
+    }, async () => {
+      logger.info('[background] Auth data stored:', { userId, email, name });
+      
+      // Open side panel if requested
+      if (shouldOpenSidePanel) {
+        try {
+          // Get the current active tab
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tabs[0]?.id) {
+            // Open side panel for the current tab
+            await chrome.sidePanel.open({ tabId: tabs[0].id });
+            logger.info('[background] Side panel opened for authenticated user');
+          }
+        } catch (error) {
+          logger.error('[background] Error opening side panel:', error);
+        }
+      }
+      
+      sendResponse({ success: true });
+      
+      // Notify all side panels about the auth success
+      chrome.runtime.sendMessage({
+        type: 'VERSE_AUTH_SUCCESS',
+        data: { userId, email, name },
+      }).catch(() => {
+        // Ignore errors if no listeners
+      });
+    });
+    return true; // Keep the message channel open for sendResponse
+  }
+  
+  if (message.type === 'VERSE_AUTH_SIGNOUT') {
+    logger.info('[background] VERSE_AUTH_SIGNOUT received from:', sender?.url);
+    (async () => {
+      logger.info('[background] Processing sign out request');
+      
+      // CRITICAL: Set isAuthenticated to false FIRST - this is the security flag
+      await chrome.storage.local.set({ isAuthenticated: false });
+      logger.info('[background] isAuthenticated set to false');
+      
+      // Clear auth data immediately
+      await chrome.storage.local.remove(['userId', 'userEmail', 'userName']);
+      logger.info('[background] Auth data cleared from storage');
+      
+      // NOTIFY all side panels about the sign out - they will show sign-in page
+      // We don't close the side panel, just update it to show the sign-in page
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'VERSE_AUTH_SIGNOUT',
+        });
+        logger.info('[background] VERSE_AUTH_SIGNOUT broadcast sent to all listeners');
+      } catch (error) {
+        // This is expected if no listeners are active
+        logger.info('[background] No active listeners for VERSE_AUTH_SIGNOUT (side panel may be closed)');
+      }
+      
+      logger.info('[background] Sign out complete - side panels will show sign-in page on next open');
+      
+      sendResponse({ success: true });
+    })();
+    return true; // Keep the message channel open for sendResponse
+  }
+  
+  return false; // Return false for other message types
+});

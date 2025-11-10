@@ -30,8 +30,44 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
 
   // Step 1: Validate model configuration
   logger.info('summarize_page: Validating model...');
-  const providers = await llmProviderStore.getAllProviders();
-  const agentModels = await agentModelStore.getAllAgentModels();
+  
+  // Check if user is authenticated
+  const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
+  const isUserAuthenticated = authResult.isAuthenticated === true && authResult.userId;
+  
+  let providers = await llmProviderStore.getAllProviders();
+  let agentModels = await agentModelStore.getAllAgentModels();
+  
+  // If user is authenticated and no providers configured, use default API keys
+  if (isUserAuthenticated && Object.keys(providers).length === 0) {
+    logger.info('[summarize] Using default API keys for authenticated user');
+    
+    // Create default provider configuration with your API key
+    const defaultProvider = {
+      name: 'OpenAI (Default)',
+      type: 'openai' as any,
+      apiKey: import.meta.env.VITE_DEFAULT_OPENAI_API_KEY || '', // Your API key from env
+      modelNames: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'],
+      createdAt: Date.now(),
+    };
+    
+    providers = {
+      'openai-default': defaultProvider,
+    };
+    
+    // Create default agent models using gpt-4o-mini
+    agentModels = {
+      [AgentNameEnum.Navigator]: {
+        provider: 'openai-default',
+        modelName: 'gpt-4o-mini',
+        parameters: {
+          temperature: 0.1,
+          maxTokens: 4096,
+        },
+      },
+    };
+  }
+  
   let modelCfg = agentModels[AgentNameEnum.Navigator];
   if (!modelCfg) modelCfg = agentModels[AgentNameEnum.Planner];
 
