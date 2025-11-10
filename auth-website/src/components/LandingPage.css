@@ -160,6 +160,21 @@
   transform: translateY(0);
 }
 
+/* Disable animations on mobile */
+@media (max-width: 768px) {
+  .hero-title-wrapper {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  
+  .demo-section {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
 .hero-title {
   font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -646,7 +661,7 @@
 
 /* Footer */
 .footer {
-  padding: 60px 0;
+  padding: 40px 0;
   background: #fff;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
