@@ -10,6 +10,10 @@ interface LandingPageProps {
 export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: LandingPageProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const heroTitleRef = useRef<HTMLDivElement>(null);
+  const videoSectionRef = useRef<HTMLDivElement>(null);
+  const [isHeroTitleVisible, setIsHeroTitleVisible] = useState(false);
+  const [isVideoVisible, setIsVideoVisible] = useState(false);
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -55,6 +59,76 @@ export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: La
     };
   }, []);
 
+  // Intersection Observer for scroll animations
+  useEffect(() => {
+    const heroTitleElement = heroTitleRef.current;
+    const videoSectionElement = videoSectionRef.current;
+
+    // Hero title should animate immediately on load since it's at the top
+    if (heroTitleElement) {
+      // Small delay to ensure smooth animation
+      setTimeout(() => {
+        setIsHeroTitleVisible(true);
+        
+        // Video appears after title animation completes (800ms delay)
+        setTimeout(() => {
+          if (videoSectionElement) {
+            // Check if video section is already in viewport
+            const rect = videoSectionElement.getBoundingClientRect();
+            const isInViewport = rect.top < window.innerHeight && rect.bottom > 0;
+            
+            if (isInViewport) {
+              setIsVideoVisible(true);
+            } else {
+              // If not in viewport yet, wait for scroll
+              const observerOptions = {
+                threshold: 0.2,
+                rootMargin: '0px 0px -50px 0px',
+              };
+
+              const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                  if (entry.isIntersecting) {
+                    setIsVideoVisible(true);
+                    observer.unobserve(videoSectionElement);
+                  }
+                });
+              }, observerOptions);
+
+              observer.observe(videoSectionElement);
+              
+              return () => {
+                observer.unobserve(videoSectionElement);
+              };
+            }
+          }
+        }, 800);
+      }, 100);
+    } else {
+      // Fallback: if title element not found, set up video observer normally
+      if (videoSectionElement) {
+        const observerOptions = {
+          threshold: 0.2,
+          rootMargin: '0px 0px -50px 0px',
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              setIsVideoVisible(true);
+            }
+          });
+        }, observerOptions);
+
+        observer.observe(videoSectionElement);
+
+        return () => {
+          observer.unobserve(videoSectionElement);
+        };
+      }
+    }
+  }, []);
+
   return (
     <div className="landing-page">
       {/* Header */}
@@ -83,7 +157,10 @@ export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: La
       <section className="hero">
         <div className="container">
           <div className="hero-content">
-            <div className="hero-title-wrapper">
+            <div 
+              ref={heroTitleRef}
+              className={`hero-title-wrapper ${isHeroTitleVisible ? 'animate-in' : ''}`}
+            >
               <h1 className="hero-title">
                 <span className="hero-title-line">Automate anything</span>
                 <span className="hero-title-line">on the web.</span>
@@ -116,7 +193,10 @@ export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: La
       </section>
 
       {/* Demo Video Section */}
-      <section className="demo-section">
+      <section 
+        ref={videoSectionRef}
+        className={`demo-section ${isVideoVisible ? 'animate-in' : ''}`}
+      >
         <div className="container">
           <div className="video-container">
             <div className="video-wrapper">

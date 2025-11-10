@@ -150,6 +150,14 @@
   display: flex;
   justify-content: flex-start;
   margin-bottom: 20px;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+}
+
+.hero-title-wrapper.animate-in {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .hero-title {
@@ -279,6 +287,14 @@
 .demo-section {
   padding: 80px 0;
   background: #fff;
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 1s ease-out, transform 1s ease-out;
+}
+
+.demo-section.animate-in {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .video-container {
