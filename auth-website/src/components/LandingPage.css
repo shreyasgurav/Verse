@@ -23,6 +23,12 @@
   z-index: 1000;
 }
 
+.header .container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
 .header-content {
   height: 64px;
   display: flex;
