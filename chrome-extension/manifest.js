@@ -63,7 +63,12 @@ const manifest = withOperaSidebar(
     host_permissions: ['<all_urls>'],
     permissions: ['storage', 'scripting', 'tabs', 'activeTab', 'debugger', 'unlimitedStorage', 'webNavigation'],
     externally_connectable: {
-      matches: ['http://localhost:3001/*', 'https://*.useverseai.com/*'],
+      matches: [
+        'http://localhost:3001/*',
+        'https://*.useverseai.com/*',
+        'https://useverseai.com/*',
+        'https://www.useverseai.com/*',
+      ],
     },
     options_page: 'settings/index.html',
     background: {

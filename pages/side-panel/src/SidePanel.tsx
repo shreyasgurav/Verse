@@ -768,7 +768,7 @@ const SidePanel = () => {
   }, [checkModelConfiguration, userAuth]);
 
   const handleGoogleSignIn = () => {
-    const authWebsiteUrl = import.meta.env.VITE_AUTH_WEBSITE_URL || 'http://localhost:3001';
+    const authWebsiteUrl = import.meta.env.VITE_AUTH_WEBSITE_URL || 'https://www.useverseai.com';
     const extensionId = chrome.runtime.id;
     const authUrl = `${authWebsiteUrl}?extensionId=${extensionId}`;
     
