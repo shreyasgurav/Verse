@@ -1014,14 +1014,33 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 
         // Initialize user credits in Firestore
         try {
-          logger.info('[Credits] Initializing credits for user:', userId);
+          logger.info('[Credits] Starting credit initialization for user:', userId);
+          logger.info('[Credits] Firebase initialized:', !!initializeFirebase);
+
           const credits = await initializeUserCredits(userId);
-          logger.info('[Credits] Credits initialized:', {
+
+          logger.info('[Credits] ✅ Credits successfully initialized!', {
+            userId,
             total: credits.totalCreditsUSD,
+            used: credits.usedCreditsUSD,
             remaining: credits.remainingCreditsUSD,
           });
-        } catch (error) {
-          logger.error('[Credits] Failed to initialize user credits:', error);
+
+          // Verify by reading back from Firestore
+          const verifyCredits = await getUserCredits(userId);
+          if (verifyCredits) {
+            logger.info('[Credits] ✅ Verified credits in Firestore:', verifyCredits);
+          } else {
+            logger.warning('[Credits] ⚠️ Credits initialized but could not verify');
+          }
+        } catch (error: any) {
+          logger.error('[Credits] ❌ Failed to initialize user credits:', {
+            error: error.message,
+            code: error.code,
+            stack: error.stack,
+            userId,
+          });
+          console.error('[Credits] Full error:', error);
         }
 
         // Open side panel if requested

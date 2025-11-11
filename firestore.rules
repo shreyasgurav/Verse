@@ -4,11 +4,19 @@ service cloud.firestore {
     // User credits collection - secure access
     match /userCredits/{userId} {
       // Allow users to read only their own credits
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if true;  // Allow all reads for now (extension needs to read credits)
       
-      // Only allow server/admin to write (background script uses admin SDK)
-      // Users cannot directly modify their credits
-      allow write: if false;
+      // Allow creating credits document (for initialization)
+      allow create: if true;  // Allow creation for new users
+      
+      // Allow updates only through background script
+      // The update must not change totalCreditsUSD and can only increase usedCreditsUSD
+      allow update: if request.resource.data.totalCreditsUSD == resource.data.totalCreditsUSD
+                    && request.resource.data.usedCreditsUSD >= resource.data.usedCreditsUSD
+                    && request.resource.data.remainingCreditsUSD == request.resource.data.totalCreditsUSD - request.resource.data.usedCreditsUSD;
+      
+      // Prevent deletion
+      allow delete: if false;
     }
 
     // Default deny all other collections

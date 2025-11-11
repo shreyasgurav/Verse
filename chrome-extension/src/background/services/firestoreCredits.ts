@@ -21,14 +21,21 @@ const CREDITS_COLLECTION = 'userCredits';
  */
 export async function initializeUserCredits(userId: string, totalCredits = DEFAULT_CREDIT_LIMIT): Promise<UserCredits> {
   try {
+    logger.info('[Firestore] initializeUserCredits called for:', userId);
+
     const db = getDb();
+    logger.info('[Firestore] Got Firestore instance');
+
     const creditsRef = doc(db, CREDITS_COLLECTION, userId);
+    logger.info('[Firestore] Created doc reference:', CREDITS_COLLECTION, '/', userId);
 
     // Check if user already has credits
+    logger.info('[Firestore] Checking if document exists...');
     const creditsSnap = await getDoc(creditsRef);
+
     if (creditsSnap.exists()) {
       const data = creditsSnap.data();
-      logger.info('[Firestore] User already has credits:', userId);
+      logger.info('[Firestore] ✅ User already has credits:', userId, data);
       return {
         userId,
         totalCreditsUSD: data.totalCreditsUSD,
@@ -40,6 +47,7 @@ export async function initializeUserCredits(userId: string, totalCredits = DEFAU
     }
 
     // Create new credits for user
+    logger.info('[Firestore] Creating new credits document...');
     const now = Date.now();
     const userCredits: UserCredits = {
       userId,
@@ -50,18 +58,26 @@ export async function initializeUserCredits(userId: string, totalCredits = DEFAU
       createdAt: now,
     };
 
-    await setDoc(creditsRef, {
+    const docData = {
       totalCreditsUSD: userCredits.totalCreditsUSD,
       usedCreditsUSD: userCredits.usedCreditsUSD,
       remainingCreditsUSD: userCredits.remainingCreditsUSD,
       lastUpdated: serverTimestamp(),
       createdAt: serverTimestamp(),
-    });
+    };
 
-    logger.info('[Firestore] Initialized credits for user:', userId, totalCredits);
+    logger.info('[Firestore] Writing document with data:', docData);
+    await setDoc(creditsRef, docData);
+
+    logger.info('[Firestore] ✅ Successfully created credits document for user:', userId, totalCredits);
     return userCredits;
-  } catch (error) {
-    logger.error('[Firestore] Failed to initialize user credits:', error);
+  } catch (error: any) {
+    logger.error('[Firestore] ❌ Failed to initialize user credits:', {
+      error: error.message,
+      code: error.code,
+      userId,
+    });
+    console.error('[Firestore] Full error object:', error);
     throw error;
   }
 }
