@@ -30,18 +30,37 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
 
   // Step 1: Validate model configuration
   logger.info('summarize_page: Validating model...');
-  
+
   // Check if user is authenticated
   const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
   const isUserAuthenticated = authResult.isAuthenticated === true && authResult.userId;
-  
+
   let providers = await llmProviderStore.getAllProviders();
   let agentModels = await agentModelStore.getAllAgentModels();
-  
+
   // If user is authenticated and no providers configured, use default API keys
   if (isUserAuthenticated && Object.keys(providers).length === 0) {
+    // Initialize user credits if first time
+    const { initializeUserCredits, checkUserCredits } = await import('./credits');
+    await initializeUserCredits(authResult.userId);
+
+    // Check if user has remaining credits
+    const creditCheck = await checkUserCredits(authResult.userId);
+
+    if (!creditCheck.hasCredits) {
+      throw new Error(
+        `You've used all $${creditCheck.totalCredits.toFixed(2)} of free credits. ` +
+          `Please add your own API keys in Settings to continue using Verse.`,
+      );
+    }
+
     logger.info('[summarize] Using default API keys for authenticated user');
-    
+    logger.info('[summarize] Remaining credits:', `$${creditCheck.remainingCredits.toFixed(4)}`);
+
+    // Create token usage callback
+    const { TokenUsageCallbackHandler } = await import('../callbacks/tokenUsage');
+    const tokenCallback = new TokenUsageCallbackHandler(authResult.userId, 'gpt-4o-mini');
+
     // Create default provider configuration with your API key
     const defaultProvider = {
       name: 'OpenAI (Default)',
@@ -50,12 +69,12 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
       modelNames: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'],
       createdAt: Date.now(),
     };
-    
+
     providers = {
       'openai-default': defaultProvider,
     };
-    
-    // Create default agent models using gpt-4o-mini
+
+    // Create default agent models using gpt-4o-mini with callback
     agentModels = {
       [AgentNameEnum.Navigator]: {
         provider: 'openai-default',
@@ -64,10 +83,11 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
           temperature: 0.1,
           maxTokens: 4096,
         },
+        callbacks: [tokenCallback],
       },
     };
   }
-  
+
   let modelCfg = agentModels[AgentNameEnum.Navigator];
   if (!modelCfg) modelCfg = agentModels[AgentNameEnum.Planner];
 
@@ -85,7 +105,11 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
   const url = tabInfo.url || '';
 
   // Check for restricted URLs
-  if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.includes('chrome.google.com/webstore')) {
+  if (
+    url.startsWith('chrome://') ||
+    url.startsWith('chrome-extension://') ||
+    url.includes('chrome.google.com/webstore')
+  ) {
     throw new Error('Cannot summarize Chrome pages. Try a regular webpage.');
   }
 
@@ -257,7 +281,7 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
     '- For articles: summarize the main points and arguments',
     '- For product pages: describe the actual product, not the purchase buttons',
     '- If you cannot find meaningful content (only UI elements visible), say "The page shows mostly interface elements without substantial content visible."',
-    '- Be specific about the actual information/content, not the website\'s features',
+    "- Be specific about the actual information/content, not the website's features",
     '',
     'Page content:',
     extractedText,

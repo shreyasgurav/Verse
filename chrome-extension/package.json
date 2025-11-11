@@ -28,6 +28,7 @@
     "@langchain/ollama": "0.2.4",
     "@langchain/openai": "0.6.14",
     "@langchain/xai": "^0.1.0",
+    "firebase": "^12.5.0",
     "jsonrepair": "3.13.1",
     "posthog-js": "^1.271.0",
     "puppeteer-core": "^24.10.1",

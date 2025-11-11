@@ -1,7 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FiSettings } from 'react-icons/fi';
-import { type Message, Actors, chatHistoryStore, agentModelStore, generalSettingsStore, type ThinkingStep, llmProviderStore, type ProviderConfig, llmProviderModelNames, ProviderTypeEnum, AgentNameEnum, getDefaultAgentModelParams, type ChatHistoryStorage } from '@extension/storage';
+import {
+  type Message,
+  Actors,
+  chatHistoryStore,
+  agentModelStore,
+  generalSettingsStore,
+  type ThinkingStep,
+  llmProviderStore,
+  type ProviderConfig,
+  llmProviderModelNames,
+  ProviderTypeEnum,
+  AgentNameEnum,
+  getDefaultAgentModelParams,
+  type ChatHistoryStorage,
+} from '@extension/storage';
 import favoritesStorage, { type FavoritePrompt } from '@extension/storage/lib/prompt/favorites';
 import { t } from '@extension/i18n';
 import MessageList from './components/MessageList';
@@ -25,35 +39,34 @@ const isThinkingEvent = (actor: Actors, state: ExecutionState): boolean => {
   if (actor === Actors.PLANNER && state === ExecutionState.STEP_OK) {
     return true; // "1. Navigate to Instagram..."
   }
-  
+
   // Navigator actions - only show as thinking if it's actual reasoning, not simple responses
   if (actor === Actors.NAVIGATOR && state === ExecutionState.ACT_START) {
     return true; // "Navigate to Instagram homepage..."
   }
-  
+
   // Validator checks
   if (actor === Actors.VALIDATOR && state === ExecutionState.STEP_OK) {
     return true;
   }
-  
+
   // Errors during execution
   if (state === ExecutionState.STEP_FAIL || state === ExecutionState.ACT_FAIL) {
     return true; // "Tab operation timed out..."
   }
-  
+
   return false;
 };
 
 const isFinalEvent = (actor: Actors, state: ExecutionState): boolean => {
   // Only TASK_OK/TASK_FAIL from SYSTEM are truly final
-  if (actor === Actors.SYSTEM && 
-      [ExecutionState.TASK_OK, ExecutionState.TASK_FAIL].includes(state)) {
+  if (actor === Actors.SYSTEM && [ExecutionState.TASK_OK, ExecutionState.TASK_FAIL].includes(state)) {
     return true;
   }
-  
+
   // ACT_OK is NOT final - it's part of thinking!
   // User messages are handled separately in handleSendMessage
-  
+
   return false;
 };
 
@@ -116,18 +129,23 @@ const SidePanel = () => {
   const [currentTabMeta, setCurrentTabMeta] = useState<{ title: string; icon?: string; url?: string } | null>(null);
   const [userAuth, setUserAuth] = useState<{ userId: string; email: string; name: string } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  
+  const [userCredits, setUserCredits] = useState<{
+    remaining: number;
+    total: number;
+    used: number;
+  } | null>(null);
+
   // Tab-specific state
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
   const tabIdRef = useRef<number | null>(null);
   const [needsConnection, setNeedsConnection] = useState(false);
-  
+
   // Tab-specific chat history store
   const [tabChatHistoryStore, setTabChatHistoryStore] = useState<ChatHistoryStorage | null>(null);
-  
+
   // Store unsent input text per tab (tabId -> text)
   const tabInputTextRef = useRef<Map<number, string>>(new Map());
-  
+
   // Track current input text
   const [currentInputText, setCurrentInputText] = useState<string>('');
   const currentInputTextRef = useRef<string>('');
@@ -140,155 +158,155 @@ const SidePanel = () => {
 
   // Function to initialize tab context (extracted for reuse)
   const initializeTabContext = useCallback(async (forceTabId?: number) => {
-      try {
-        let tabId: number | null = forceTabId || null;
-        
-        // CRITICAL: If forceTabId is provided, use it immediately and set ref SYNCHRONOUSLY
-        // This prevents race conditions where reloadCurrentSession runs before tabId is set
-        if (forceTabId) {
-          console.log('🔒 Using forced tab ID:', forceTabId);
-          tabIdRef.current = forceTabId; // Set IMMEDIATELY before any async operations
-        }
-        
-        // CRITICAL: Get the tab ID from the background script via the port connection
-        // This is the ONLY reliable way to know which tab this side panel belongs to
-        // The port name contains the tab ID: "side-panel-{tabId}"
-        
-        // Method 1: Extract from existing port connection (if already connected)
-        // We'll set this up when we connect to the background script
-        
-        // Method 2: Try to get from URL search params (passed during side panel setup)
-        // This is set by the background script when enabling the side panel
-        if (!tabId) {
-          const urlParams = new URLSearchParams(window.location.search);
-          const urlTabId = urlParams.get('tabId');
-          if (urlTabId) {
-            tabId = parseInt(urlTabId, 10);
-            tabIdRef.current = tabId; // Set IMMEDIATELY
-            console.log('Got tab ID from URL params:', tabId);
-          }
-        }
-        
-        // Method 3: Fallback - ask background script for current tab
-        // This is less reliable but better than not initializing at all
-        if (!tabId) {
-          try {
-            console.error('❌ CRITICAL: URL params missing, using unreliable fallback');
-            console.error('This may cause incorrect tab association during fast tab switches');
-            console.error('URL:', window.location.href);
-            console.trace('Stack trace for debugging:');
-            
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tabs[0]?.id) {
-              tabId = tabs[0].id;
-              tabIdRef.current = tabId; // Set IMMEDIATELY even in fallback
-              console.warn('⚠️ Got tab ID from active tab query (fallback):', tabId);
-              console.warn('This may be incorrect if user switched tabs quickly');
-            }
-          } catch (error) {
-            console.error('Failed to get tab ID from fallback:', error);
-          }
-        }
-        
-        // CRITICAL: If we still don't have a tab ID, we MUST NOT proceed
-        if (!tabId) {
-          console.error('❌ CRITICAL: Could not determine tab ID! Side panel will not initialize.');
-          console.error('URL:', window.location.href);
-          console.error('Please report this issue with the above URL.');
-          return; // Don't initialize without tab ID
-        }
-        
-        // Double-check: Ensure tab ID is valid
-        if (tabId && tabId > 0) {
-          console.log('=== Side Panel Initialization ===');
-          console.log('Tab ID:', tabId);
-          console.log('Window location:', window.location.href);
-          
-          setCurrentTabId(tabId);
-          tabIdRef.current = tabId;
-          try {
-            const tab = await chrome.tabs.get(tabId);
-            setCurrentTabMeta({ title: tab.title || '', icon: tab.favIconUrl, url: tab.url });
-          } catch (e) {
-            setCurrentTabMeta(null);
-          }
-          
-          // CRITICAL: Reset all UI states for new tab
-          setShowStopButton(false);
-          setInputEnabled(true);
-          setCurrentTaskState('idle');
-          setCurrentThinking([]);
-          currentThinkingRef.current = [];
-          setCurrentTaskId(null);
-          console.log('✅ Reset UI states for tab:', tabId);
-          
-          // Create tab-specific chat history store
-          const { createChatHistoryStorage } = await import('@extension/storage');
-          const store = createChatHistoryStorage(tabId);
-          setTabChatHistoryStore(store);
-          console.log('Created tab-specific storage for tab:', tabId);
-          
-          // Smart session loading: Load if tab has history, skip if brand new
-          try {
-            const sessions = await store.getSessionsMetadata();
-            console.log('📊 Found', sessions.length, 'existing sessions for tab:', tabId);
-            
-            if (sessions.length > 0) {
-              // This tab has history - load the most recent session
-              const sortedSessions = sessions.sort((a, b) => b.createdAt - a.createdAt);
-              const latestSession = sortedSessions[0];
-              
-              console.log('🔄 Loading latest session:', latestSession.id, 'created:', new Date(latestSession.createdAt));
-              
-              const fullSession = await store.getSession(latestSession.id);
-              if (fullSession && fullSession.messages.length > 0) {
-                setCurrentSessionId(fullSession.id);
-                sessionIdRef.current = fullSession.id;
-                setMessages(fullSession.messages);
-                setIsFollowUpMode(true);
-                console.log('✅ Loaded session with', fullSession.messages.length, 'messages');
-              } else {
-                console.log('⚠️ Session exists but has no messages, starting fresh');
-              }
-            } else {
-              console.log('✅ No existing sessions, starting fresh (new tab)');
-            }
-          } catch (error) {
-            console.error('Failed to load existing session:', error);
-            // Continue anyway - user can start a new session
-          }
-          
-          console.log('=== Initialization Complete ===');
-          
-          // CRITICAL: Trigger connection setup
-          setNeedsConnection(true);
-        } else {
-          console.error('❌ Failed to determine tab ID!');
-        }
-      } catch (error) {
-        console.error('Failed to initialize tab context:', error);
+    try {
+      let tabId: number | null = forceTabId || null;
+
+      // CRITICAL: If forceTabId is provided, use it immediately and set ref SYNCHRONOUSLY
+      // This prevents race conditions where reloadCurrentSession runs before tabId is set
+      if (forceTabId) {
+        console.log('🔒 Using forced tab ID:', forceTabId);
+        tabIdRef.current = forceTabId; // Set IMMEDIATELY before any async operations
       }
-    }, []);
-  
+
+      // CRITICAL: Get the tab ID from the background script via the port connection
+      // This is the ONLY reliable way to know which tab this side panel belongs to
+      // The port name contains the tab ID: "side-panel-{tabId}"
+
+      // Method 1: Extract from existing port connection (if already connected)
+      // We'll set this up when we connect to the background script
+
+      // Method 2: Try to get from URL search params (passed during side panel setup)
+      // This is set by the background script when enabling the side panel
+      if (!tabId) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTabId = urlParams.get('tabId');
+        if (urlTabId) {
+          tabId = parseInt(urlTabId, 10);
+          tabIdRef.current = tabId; // Set IMMEDIATELY
+          console.log('Got tab ID from URL params:', tabId);
+        }
+      }
+
+      // Method 3: Fallback - ask background script for current tab
+      // This is less reliable but better than not initializing at all
+      if (!tabId) {
+        try {
+          console.error('❌ CRITICAL: URL params missing, using unreliable fallback');
+          console.error('This may cause incorrect tab association during fast tab switches');
+          console.error('URL:', window.location.href);
+          console.trace('Stack trace for debugging:');
+
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tabs[0]?.id) {
+            tabId = tabs[0].id;
+            tabIdRef.current = tabId; // Set IMMEDIATELY even in fallback
+            console.warn('⚠️ Got tab ID from active tab query (fallback):', tabId);
+            console.warn('This may be incorrect if user switched tabs quickly');
+          }
+        } catch (error) {
+          console.error('Failed to get tab ID from fallback:', error);
+        }
+      }
+
+      // CRITICAL: If we still don't have a tab ID, we MUST NOT proceed
+      if (!tabId) {
+        console.error('❌ CRITICAL: Could not determine tab ID! Side panel will not initialize.');
+        console.error('URL:', window.location.href);
+        console.error('Please report this issue with the above URL.');
+        return; // Don't initialize without tab ID
+      }
+
+      // Double-check: Ensure tab ID is valid
+      if (tabId && tabId > 0) {
+        console.log('=== Side Panel Initialization ===');
+        console.log('Tab ID:', tabId);
+        console.log('Window location:', window.location.href);
+
+        setCurrentTabId(tabId);
+        tabIdRef.current = tabId;
+        try {
+          const tab = await chrome.tabs.get(tabId);
+          setCurrentTabMeta({ title: tab.title || '', icon: tab.favIconUrl, url: tab.url });
+        } catch (e) {
+          setCurrentTabMeta(null);
+        }
+
+        // CRITICAL: Reset all UI states for new tab
+        setShowStopButton(false);
+        setInputEnabled(true);
+        setCurrentTaskState('idle');
+        setCurrentThinking([]);
+        currentThinkingRef.current = [];
+        setCurrentTaskId(null);
+        console.log('✅ Reset UI states for tab:', tabId);
+
+        // Create tab-specific chat history store
+        const { createChatHistoryStorage } = await import('@extension/storage');
+        const store = createChatHistoryStorage(tabId);
+        setTabChatHistoryStore(store);
+        console.log('Created tab-specific storage for tab:', tabId);
+
+        // Smart session loading: Load if tab has history, skip if brand new
+        try {
+          const sessions = await store.getSessionsMetadata();
+          console.log('📊 Found', sessions.length, 'existing sessions for tab:', tabId);
+
+          if (sessions.length > 0) {
+            // This tab has history - load the most recent session
+            const sortedSessions = sessions.sort((a, b) => b.createdAt - a.createdAt);
+            const latestSession = sortedSessions[0];
+
+            console.log('🔄 Loading latest session:', latestSession.id, 'created:', new Date(latestSession.createdAt));
+
+            const fullSession = await store.getSession(latestSession.id);
+            if (fullSession && fullSession.messages.length > 0) {
+              setCurrentSessionId(fullSession.id);
+              sessionIdRef.current = fullSession.id;
+              setMessages(fullSession.messages);
+              setIsFollowUpMode(true);
+              console.log('✅ Loaded session with', fullSession.messages.length, 'messages');
+            } else {
+              console.log('⚠️ Session exists but has no messages, starting fresh');
+            }
+          } else {
+            console.log('✅ No existing sessions, starting fresh (new tab)');
+          }
+        } catch (error) {
+          console.error('Failed to load existing session:', error);
+          // Continue anyway - user can start a new session
+        }
+
+        console.log('=== Initialization Complete ===');
+
+        // CRITICAL: Trigger connection setup
+        setNeedsConnection(true);
+      } else {
+        console.error('❌ Failed to determine tab ID!');
+      }
+    } catch (error) {
+      console.error('Failed to initialize tab context:', error);
+    }
+  }, []);
+
   // Get current tab ID on mount and create tab-specific storage
   useEffect(() => {
     initializeTabContext();
   }, [initializeTabContext]);
-  
+
   // CRITICAL: Detect when URL changes (new tab opened) and reinitialize
   useEffect(() => {
     const checkUrlChange = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const urlTabId = urlParams.get('tabId');
-      
+
       if (urlTabId) {
         const newTabId = parseInt(urlTabId, 10);
-        
+
         // If URL tab ID differs from current tab ID, reinitialize
         if (newTabId !== tabIdRef.current && tabIdRef.current !== null) {
           console.log('🔄 URL tab ID changed!', tabIdRef.current, '→', newTabId);
           console.log('Reinitializing for new tab...');
-          
+
           // Clear current state
           setMessages([]);
           setCurrentSessionId(null);
@@ -300,19 +318,19 @@ const SidePanel = () => {
           currentThinkingRef.current = [];
           setCurrentTaskId(null);
           setCurrentTaskState('idle');
-          
+
           // Reinitialize with new tab ID
           initializeTabContext();
         }
       }
     };
-    
+
     // Check on mount and when URL changes
     checkUrlChange();
-    
+
     // Listen for URL changes (popstate event)
     window.addEventListener('popstate', checkUrlChange);
-    
+
     return () => {
       window.removeEventListener('popstate', checkUrlChange);
     };
@@ -322,19 +340,19 @@ const SidePanel = () => {
   useEffect(() => {
     const handleTabActivated = async (activeInfo: chrome.tabs.TabActiveInfo) => {
       const newTabId = activeInfo.tabId;
-      
+
       // Only reinitialize if the tab actually changed
       if (newTabId !== tabIdRef.current) {
         console.log('=== Tab Switch Detected ===');
         console.log('Previous tab:', tabIdRef.current);
         console.log('New tab:', newTabId);
-        
+
         // Save current input text for the old tab (if exists)
         if (tabIdRef.current !== null && currentInputTextRef.current) {
           tabInputTextRef.current.set(tabIdRef.current, currentInputTextRef.current);
           console.log('Saved input text for tab', tabIdRef.current, ':', currentInputTextRef.current);
         }
-        
+
         // Clear current state
         setMessages([]);
         setCurrentSessionId(null);
@@ -346,7 +364,7 @@ const SidePanel = () => {
         currentThinkingRef.current = [];
         setCurrentTaskId(null);
         setCurrentTaskState('idle');
-        
+
         // Reinitialize with new tab
         await initializeTabContext(newTabId);
 
@@ -357,18 +375,18 @@ const SidePanel = () => {
         } catch (e) {
           setCurrentTabMeta(null);
         }
-        
+
         // Restore input text for the new tab (if exists)
         const savedText = tabInputTextRef.current.get(newTabId) || '';
         if (setInputTextRef.current) {
           setInputTextRef.current(savedText);
           console.log('Restored input text for tab', newTabId, ':', savedText);
         }
-        
+
         console.log('=== Tab Switch Complete ===');
       }
     };
-    
+
     // Add listener
     chrome.tabs.onActivated.addListener(handleTabActivated);
     // Keep metadata in sync on URL/title/icon changes within the same tab
@@ -378,7 +396,7 @@ const SidePanel = () => {
       }
     };
     chrome.tabs.onUpdated.addListener(handleUpdated);
-    
+
     // Cleanup
     return () => {
       chrome.tabs.onActivated.removeListener(handleTabActivated);
@@ -405,16 +423,20 @@ const SidePanel = () => {
       // Check if user is authenticated
       const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
       const isUserAuthenticated = authResult.isAuthenticated === true && authResult.userId;
-      
-      console.log('[SidePanel] checkModelConfiguration:', { isUserAuthenticated, userId: authResult.userId, isAuthenticated: authResult.isAuthenticated });
-      
+
+      console.log('[SidePanel] checkModelConfiguration:', {
+        isUserAuthenticated,
+        userId: authResult.userId,
+        isAuthenticated: authResult.isAuthenticated,
+      });
+
       // If user is authenticated, they can use the app (with our API keys)
       if (isUserAuthenticated) {
         console.log('🔍 User is authenticated, allowing access with default API');
         setHasConfiguredModels(true);
         return;
       }
-      
+
       // User is NOT authenticated - check if they have configured their own models
       console.log('🔍 User is NOT authenticated, checking for configured models');
       const configuredAgents = await agentModelStore.getConfiguredAgents();
@@ -424,12 +446,12 @@ const SidePanel = () => {
       const hasPlanner = configuredAgents.includes('planner' as any);
       const hasNavigator = configuredAgents.includes('navigator' as any);
       const allConfigured = hasPlanner && hasNavigator;
-      
-      console.log('🔍 Model configuration check:', { 
-        configuredAgents, 
-        hasPlanner, 
-        hasNavigator, 
-        allConfigured 
+
+      console.log('🔍 Model configuration check:', {
+        configuredAgents,
+        hasPlanner,
+        hasNavigator,
+        allConfigured,
       });
       setHasConfiguredModels(allConfigured);
     } catch (error) {
@@ -454,16 +476,17 @@ const SidePanel = () => {
     try {
       const allProviders = await llmProviderStore.getAllProviders();
       setProviders(allProviders);
-      
+
       // Try to find the first configured provider (has API key)
       const configuredEntry = Object.entries(allProviders).find(([, cfg]) => Boolean(cfg?.apiKey?.trim()));
       if (configuredEntry) {
         const [pid, cfg] = configuredEntry as [string, ProviderConfig];
         setSingleProvider(pid);
         setSingleApiKey(cfg.apiKey || '');
-        const models = (cfg.modelNames && cfg.modelNames.length > 0)
-          ? cfg.modelNames
-          : (llmProviderModelNames[pid as keyof typeof llmProviderModelNames] || []);
+        const models =
+          cfg.modelNames && cfg.modelNames.length > 0
+            ? cfg.modelNames
+            : llmProviderModelNames[pid as keyof typeof llmProviderModelNames] || [];
         setSingleModel(models[0] ? `${pid}>${models[0]}` : '');
       }
     } catch (error) {
@@ -478,16 +501,17 @@ const SidePanel = () => {
       alert('Please fill all required fields');
       return;
     }
-    
+
     try {
       // Save provider configuration
       const existing = providers[singleProvider];
       const cfg = (existing ? { ...existing } : getDefaultProviderConfig(singleProvider)) as ProviderConfig;
       cfg.apiKey = singleApiKey;
       if (cfg.type !== ProviderTypeEnum.AzureOpenAI) {
-        cfg.modelNames = cfg.modelNames && cfg.modelNames.length > 0
-          ? cfg.modelNames
-          : (llmProviderModelNames[singleProvider as keyof typeof llmProviderModelNames] || []);
+        cfg.modelNames =
+          cfg.modelNames && cfg.modelNames.length > 0
+            ? cfg.modelNames
+            : llmProviderModelNames[singleProvider as keyof typeof llmProviderModelNames] || [];
       }
       await llmProviderStore.setProvider(singleProvider, cfg as ProviderConfig);
 
@@ -497,13 +521,17 @@ const SidePanel = () => {
         const plannerParams = getDefaultAgentModelParams(provider, AgentNameEnum.Planner);
         const navigatorParams = getDefaultAgentModelParams(provider, AgentNameEnum.Navigator);
         await agentModelStore.setAgentModel(AgentNameEnum.Planner, { provider, modelName, parameters: plannerParams });
-        await agentModelStore.setAgentModel(AgentNameEnum.Navigator, { provider, modelName, parameters: navigatorParams });
+        await agentModelStore.setAgentModel(AgentNameEnum.Navigator, {
+          provider,
+          modelName,
+          parameters: navigatorParams,
+        });
       }
 
       // Refresh providers and re-check configuration
       await loadProviders();
       await checkModelConfiguration();
-      
+
       alert('Configuration saved successfully!');
     } catch (e) {
       console.error('Save failed:', e);
@@ -526,24 +554,23 @@ const SidePanel = () => {
       console.log('⏸️ Skipping reload - no tab ID yet');
       return;
     }
-    
+
     // CRITICAL: Verify we're on the correct tab before reloading
     // This prevents loading messages from the wrong tab when switching quickly
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const activeTabId = tabs[0]?.id;
-      
+
       if (activeTabId && activeTabId !== tabIdRef.current) {
         console.log('⚠️ Tab mismatch detected! Active:', activeTabId, 'Current:', tabIdRef.current);
         console.log('Reinitializing for correct tab...');
         await initializeTabContext(activeTabId);
         return;
       }
-      
     } catch (error) {
       console.error('Failed to verify tab:', error);
     }
-    
+
     // CRITICAL: Always reload messages from storage first
     // This ensures we show completed tasks even if we weren't connected when they finished
     if (sessionIdRef.current && tabChatHistoryStore) {
@@ -553,28 +580,28 @@ const SidePanel = () => {
           // Always reload from storage to ensure we have the latest messages
           // Filter out progress messages from storage (they're temporary UI state)
           const storedMessages = session.messages.filter(msg => msg.messageType !== 'progress');
-          
+
           setMessages(prevMessages => {
             // Filter out progress messages from current state too
             const currentNonProgress = prevMessages.filter(msg => msg.messageType !== 'progress');
-            
+
             // If storage has more messages, use storage version
             if (storedMessages.length > currentNonProgress.length) {
               console.log(`✅ Reloaded ${storedMessages.length - currentNonProgress.length} new messages from storage`);
               return storedMessages;
             }
-            
+
             // If same count, check if content differs (messages might have been updated)
             if (storedMessages.length === currentNonProgress.length && storedMessages.length > 0) {
               const lastStoredContent = storedMessages[storedMessages.length - 1]?.content;
               const lastCurrentContent = currentNonProgress[currentNonProgress.length - 1]?.content;
-              
+
               if (lastStoredContent !== lastCurrentContent) {
                 console.log(`✅ Reloaded updated messages from storage`);
                 return storedMessages;
               }
             }
-            
+
             return prevMessages;
           });
         }
@@ -582,14 +609,14 @@ const SidePanel = () => {
         console.error('Failed to reload session:', error);
       }
     }
-    
+
     // CRITICAL: After reloading from storage, check if executor is still running
     // This ensures UI state matches executor state (stop button, input disabled, thinking block)
     if (portRef.current && tabIdRef.current) {
       console.log('🔍 Checking executor status for tab:', tabIdRef.current);
-      portRef.current.postMessage({ 
-        type: 'check_executor_status', 
-        tabId: tabIdRef.current 
+      portRef.current.postMessage({
+        type: 'check_executor_status',
+        tabId: tabIdRef.current,
       });
     }
   }, [tabChatHistoryStore]);
@@ -603,11 +630,11 @@ const SidePanel = () => {
         try {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
           const activeTabId = tabs[0]?.id;
-          
+
           if (activeTabId && activeTabId !== tabIdRef.current) {
             console.log('🔄 Active tab changed while panel was hidden!', tabIdRef.current, '→', activeTabId);
             console.log('Reinitializing for correct tab...');
-            
+
             // Clear current state
             setMessages([]);
             setCurrentSessionId(null);
@@ -619,7 +646,7 @@ const SidePanel = () => {
             currentThinkingRef.current = [];
             setCurrentTaskId(null);
             setCurrentTaskState('idle');
-            
+
             // Reinitialize with correct tab
             await initializeTabContext();
           } else {
@@ -637,14 +664,14 @@ const SidePanel = () => {
         }
       }
     };
-    
+
     // Also recheck when window gains focus (e.g., clicking on side panel after settings)
     const handleFocus = () => {
       console.log('🎯 Side panel gained focus, rechecking configuration...');
       checkModelConfiguration();
       loadGeneralSettings();
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
 
@@ -657,7 +684,7 @@ const SidePanel = () => {
   // Load user auth from storage and handle auth callbacks
   useEffect(() => {
     let authCheckInterval: NodeJS.Timeout | null = null;
-    
+
     const loadUserAuth = async () => {
       try {
         const result = await chrome.storage.local.get(['userId', 'userEmail', 'userName', 'isAuthenticated']);
@@ -669,31 +696,55 @@ const SidePanel = () => {
             name: result.userName || '',
           });
           setIsAuthenticated(true);
+
+          // Load user credits
+          loadUserCredits();
         } else {
           // Clear auth state if not authenticated
           setUserAuth(null);
           setIsAuthenticated(false);
+          setUserCredits(null);
         }
       } catch (error) {
         console.error('Error loading user auth:', error);
         setUserAuth(null);
         setIsAuthenticated(false);
+        setUserCredits(null);
       }
     };
-    
+
+    const loadUserCredits = () => {
+      if (!userAuth?.userId) return;
+
+      chrome.runtime.sendMessage({ type: 'GET_USER_CREDITS' }, response => {
+        if (response?.credits) {
+          setUserCredits({
+            remaining: response.credits.remainingCredits,
+            total: response.credits.totalCredits,
+            used: response.credits.usedCredits,
+          });
+          console.log('[SidePanel] Loaded credits:', response.credits);
+        }
+      });
+    };
+
     // Continuously check authentication status every 2 seconds
     const checkAuthStatus = async () => {
       try {
         const result = await chrome.storage.local.get(['isAuthenticated', 'userId']);
-        
+
         // If authentication is lost, close the side panel immediately
         const storageIsAuthenticated = result.isAuthenticated === true;
         const hasUserId = !!result.userId;
-        
+
         if (!storageIsAuthenticated) {
           // Not authenticated in storage - clear state if it was previously set
           if (isAuthenticated || userAuth !== null || hasUserId) {
-            console.log('[SidePanel] Authentication lost, showing sign-in page', { storageIsAuthenticated, hasUserId, userAuth });
+            console.log('[SidePanel] Authentication lost, showing sign-in page', {
+              storageIsAuthenticated,
+              hasUserId,
+              userAuth,
+            });
             setUserAuth(null);
             setIsAuthenticated(false);
             // Trigger model configuration check to show sign-in page
@@ -717,9 +768,13 @@ const SidePanel = () => {
         // Check for auth-related changes
         if (changes.userId || changes.userEmail || changes.userName || changes.isAuthenticated) {
           // If isAuthenticated was removed or set to false, clear auth state immediately
-          if (changes.isAuthenticated?.newValue === false || 
-              (changes.isAuthenticated?.oldValue === true && changes.isAuthenticated?.newValue === undefined)) {
-            console.log('[SidePanel] Storage change: Auth state changed to false/undefined, clearing auth and showing sign-in page');
+          if (
+            changes.isAuthenticated?.newValue === false ||
+            (changes.isAuthenticated?.oldValue === true && changes.isAuthenticated?.newValue === undefined)
+          ) {
+            console.log(
+              '[SidePanel] Storage change: Auth state changed to false/undefined, clearing auth and showing sign-in page',
+            );
             setUserAuth(null);
             setIsAuthenticated(false);
             // Trigger model configuration check to show sign-in page
@@ -745,7 +800,7 @@ const SidePanel = () => {
     const pollInterval = setInterval(() => {
       loadUserAuth();
     }, 1000); // Check every second
-    
+
     // SECURITY: Continuously verify authentication status every 2 seconds
     authCheckInterval = setInterval(() => {
       checkAuthStatus();
@@ -789,19 +844,19 @@ const SidePanel = () => {
     const authWebsiteUrl = import.meta.env.VITE_AUTH_WEBSITE_URL || 'https://www.useverseai.com';
     const extensionId = chrome.runtime.id;
     const authUrl = `${authWebsiteUrl}?extensionId=${extensionId}`;
-    
+
     // Open auth website in a new tab
-    chrome.tabs.create({ url: authUrl }, (tab) => {
+    chrome.tabs.create({ url: authUrl }, tab => {
       // Listen for when the auth tab is closed
       const tabId = tab.id;
       if (!tabId) return;
 
       const checkTabClosed = setInterval(() => {
-        chrome.tabs.get(tabId, (tab) => {
+        chrome.tabs.get(tabId, tab => {
           if (chrome.runtime.lastError || !tab) {
             // Tab was closed, check for auth data
             clearInterval(checkTabClosed);
-            chrome.storage.local.get(['userId', 'userEmail', 'userName', 'isAuthenticated'], (result) => {
+            chrome.storage.local.get(['userId', 'userEmail', 'userName', 'isAuthenticated'], result => {
               if (result.userId && result.isAuthenticated === true) {
                 setUserAuth({
                   userId: result.userId,
@@ -846,23 +901,26 @@ const SidePanel = () => {
     };
   }, [showStopButton, reloadCurrentSession]);
 
-  const appendMessage = useCallback((newMessage: Message, sessionId?: string | null) => {
-    const isProgressMessage = newMessage.content === progressMessage;
+  const appendMessage = useCallback(
+    (newMessage: Message, sessionId?: string | null) => {
+      const isProgressMessage = newMessage.content === progressMessage;
 
-    setMessages(prev => {
-      // DON'T filter progress messages anymore - let handleTaskState manage them
-      return [...prev, newMessage];
-    });
+      setMessages(prev => {
+        // DON'T filter progress messages anymore - let handleTaskState manage them
+        return [...prev, newMessage];
+      });
 
-    const effectiveSessionId = sessionId !== undefined ? sessionId : sessionIdRef.current;
+      const effectiveSessionId = sessionId !== undefined ? sessionId : sessionIdRef.current;
 
-    // Save to storage (skip progress/thinking messages)
-    if (effectiveSessionId && !isProgressMessage && newMessage.messageType !== 'thinking' && tabChatHistoryStore) {
-      tabChatHistoryStore
-        .addMessage(effectiveSessionId, newMessage)
-        .catch(err => console.error('Failed to save message to history:', err));
-    }
-  }, [tabChatHistoryStore]);
+      // Save to storage (skip progress/thinking messages)
+      if (effectiveSessionId && !isProgressMessage && newMessage.messageType !== 'thinking' && tabChatHistoryStore) {
+        tabChatHistoryStore
+          .addMessage(effectiveSessionId, newMessage)
+          .catch(err => console.error('Failed to save message to history:', err));
+      }
+    },
+    [tabChatHistoryStore],
+  );
 
   const handleTaskState = useCallback(
     (event: AgentEvent) => {
@@ -876,15 +934,15 @@ const SidePanel = () => {
         setCurrentTaskId(data.taskId);
         setIsHistoricalSession(false);
         setCurrentTaskState('starting');
-        
+
         const progressMsg: Message = {
           actor: Actors.SYSTEM,
           content: progressMessage,
           timestamp: timestamp,
           messageType: 'progress',
-          taskId: data.taskId
+          taskId: data.taskId,
         };
-        
+
         setMessages(prev => [...prev, progressMsg]);
         return;
       }
@@ -894,21 +952,19 @@ const SidePanel = () => {
       const isThinking = isThinkingEvent(actor, state);
       if (isThinking && content) {
         setCurrentTaskState('thinking');
-        
+
         // Show as a regular assistant message
         const thinkingMessage: Message = {
           actor: actor, // Keep original actor (planner/navigator)
           content: content,
           timestamp: timestamp,
           messageType: 'assistant',
-          taskId: data.taskId
+          taskId: data.taskId,
         };
-        
+
         // Remove progress message (3 dots) and add thinking message
         setMessages(prev => {
-          const filtered = prev.filter(
-            msg => !(msg.taskId === data.taskId && msg.messageType === 'progress')
-          );
+          const filtered = prev.filter(msg => !(msg.taskId === data.taskId && msg.messageType === 'progress'));
           return [...filtered, thinkingMessage];
         });
         return; // Exit here
@@ -918,30 +974,28 @@ const SidePanel = () => {
       const isFinal = isFinalEvent(actor, state);
       if (isFinal) {
         setCurrentTaskState('complete');
-        
+
         // DON'T add final message here - it's saved by background script to storage
         // The polling mechanism will load it from storage automatically
         // This prevents duplicate final messages
-        
+
         // Just remove progress messages (3 dots)
         setMessages(prev => {
-          return prev.filter(
-            msg => !(msg.taskId === data.taskId && msg.messageType === 'progress')
-          );
+          return prev.filter(msg => !(msg.taskId === data.taskId && msg.messageType === 'progress'));
         });
-        
+
         // ALWAYS clear state and update UI, even if no content
         setCurrentThinking([]);
         currentThinkingRef.current = [];
         setCurrentTaskId(null);
         setCurrentTaskState('idle');
-        
+
         // Clear task timeout
         if (taskTimeoutRef.current) {
           clearTimeout(taskTimeoutRef.current);
           taskTimeoutRef.current = null;
         }
-        
+
         // Handle UI state - CRITICAL: Always update UI state for final events
         if (actor === Actors.SYSTEM) {
           switch (state) {
@@ -1012,22 +1066,28 @@ const SidePanel = () => {
             currentThinkingRef.current = message.steps.map((step: any) => ({
               actor: step.actor,
               content: step.content,
-              timestamp: step.timestamp
+              timestamp: step.timestamp,
             }));
             // Also update the live thinking state for display
             setCurrentThinking([...currentThinkingRef.current]);
           }
         } else if (message && message.type === 'executor_status') {
           // Handle executor status response
-          console.log('📊 Executor status:', 'running:', message.isRunning, 'steps:', message.thinkingSteps?.length || 0);
-          
+          console.log(
+            '📊 Executor status:',
+            'running:',
+            message.isRunning,
+            'steps:',
+            message.thinkingSteps?.length || 0,
+          );
+
           if (message.isRunning) {
             // Executor is running - update UI to show active state
             console.log('✅ Executor is running, updating UI state');
             setShowStopButton(true);
             setInputEnabled(false);
             setCurrentTaskState('thinking');
-            
+
             // Add progress message (3 dots) if not already present
             setMessages(prev => {
               const hasProgress = prev.some(msg => msg.messageType === 'progress');
@@ -1037,30 +1097,32 @@ const SidePanel = () => {
                   content: progressMessage,
                   timestamp: Date.now(),
                   messageType: 'progress',
-                  taskId: message.taskId || 'unknown'
+                  taskId: message.taskId || 'unknown',
                 };
                 return [...prev, progressMsg];
               }
               return prev;
             });
-            
+
             // Update thinking steps if available
             if (message.thinkingSteps && message.thinkingSteps.length > 0) {
               currentThinkingRef.current = message.thinkingSteps.map((step: any) => ({
                 actor: step.actor,
                 content: step.content,
-                timestamp: step.timestamp
+                timestamp: step.timestamp,
               }));
               setCurrentThinking([...currentThinkingRef.current]);
             } else {
               // Executor is running but no steps yet - show "Starting..." placeholder
               console.log('⏳ Executor running but no steps yet, showing placeholder');
-              currentThinkingRef.current = [{
-                actor: Actors.SYSTEM,
-                content: 'Starting task...',
-                timestamp: Date.now(),
-                state: 'task.start'
-              }];
+              currentThinkingRef.current = [
+                {
+                  actor: Actors.SYSTEM,
+                  content: 'Starting task...',
+                  timestamp: Date.now(),
+                  state: 'task.start',
+                },
+              ];
               setCurrentThinking([...currentThinkingRef.current]);
             }
           } else {
@@ -1088,6 +1150,14 @@ const SidePanel = () => {
             // Update tab ID and reinitialize context
             initializeTabContext(message.newTabId);
           }
+        } else if (message && message.type === 'CREDITS_UPDATED') {
+          // Update credits display when background sends update
+          console.log('[SidePanel] Credits updated:', message.data);
+          setUserCredits({
+            remaining: message.data.remainingCredits,
+            total: message.data.totalCredits,
+            used: message.data.usedCredits,
+          });
         }
       });
 
@@ -1099,7 +1169,7 @@ const SidePanel = () => {
           clearInterval(heartbeatIntervalRef.current);
           heartbeatIntervalRef.current = null;
         }
-        
+
         // If a task is running (stop button visible), attempt to reconnect
         // This handles transient disconnections during navigation/tab switches
         if (showStopButton) {
@@ -1108,15 +1178,15 @@ const SidePanel = () => {
             if (!portRef.current && tabIdRef.current) {
               console.log('Reconnecting to background service...');
               setupConnection();
-              
+
               // CRITICAL: Request current thinking steps from executor after reconnecting
               // This ensures we show all thinking steps, not just the ones after reconnection
               setTimeout(() => {
                 if (portRef.current && tabIdRef.current) {
                   console.log('Requesting thinking steps from executor...');
-                  portRef.current.postMessage({ 
-                    type: 'get_thinking_steps', 
-                    tabId: tabIdRef.current 
+                  portRef.current.postMessage({
+                    type: 'get_thinking_steps',
+                    tabId: tabIdRef.current,
                   });
                 }
               }, 100); // Small delay to ensure connection is established
@@ -1305,11 +1375,14 @@ const SidePanel = () => {
         }
 
         // Append user-visible command message
-        appendMessage({
-          actor: Actors.USER,
-          content: 'Summarize page',
-          timestamp: Date.now(),
-        }, sessionIdRef.current);
+        appendMessage(
+          {
+            actor: Actors.USER,
+            content: 'Summarize page',
+            timestamp: Date.now(),
+          },
+          sessionIdRef.current,
+        );
 
         // Add progress message (3 dots) immediately
         setMessages(prev => [
@@ -1396,7 +1469,7 @@ const SidePanel = () => {
     const trimmedText = text.trim();
 
     if (!trimmedText) return;
-    
+
     // Clear the stored input text for this tab when message is sent
     if (tabIdRef.current !== null) {
       tabInputTextRef.current.delete(tabIdRef.current);
@@ -1449,17 +1522,20 @@ const SidePanel = () => {
       }
 
       // Set a 5-minute timeout to prevent infinite loading
-      taskTimeoutRef.current = window.setTimeout(() => {
-        console.error('Task timeout: No response from background after 5 minutes');
-        appendMessage({
-          actor: Actors.SYSTEM,
-          content: 'Task timed out. The executor may have encountered an error. Please try again.',
-          timestamp: Date.now(),
-        });
-        setInputEnabled(true);
-        setShowStopButton(false);
-        setIsFollowUpMode(false);
-      }, 5 * 60 * 1000); // 5 minutes
+      taskTimeoutRef.current = window.setTimeout(
+        () => {
+          console.error('Task timeout: No response from background after 5 minutes');
+          appendMessage({
+            actor: Actors.SYSTEM,
+            content: 'Task timed out. The executor may have encountered an error. Please try again.',
+            timestamp: Date.now(),
+          });
+          setInputEnabled(true);
+          setShowStopButton(false);
+          setIsFollowUpMode(false);
+        },
+        5 * 60 * 1000,
+      ); // 5 minutes
 
       // Create a new chat session for this task if not in follow-up mode
       if (!isFollowUpMode) {
@@ -1752,8 +1828,7 @@ const SidePanel = () => {
 
   return (
     <div>
-      <div
-        className={`flex h-screen flex-col overflow-hidden rounded-2xl`}>
+      <div className={`flex h-screen flex-col overflow-hidden rounded-2xl`}>
         <header className="header relative">
           <div className="header-logo">
             {showHistory && (
@@ -1766,6 +1841,15 @@ const SidePanel = () => {
               </button>
             )}
           </div>
+
+          {/* Credits display - only show if authenticated and using default keys */}
+          {isAuthenticated && userAuth && userCredits && (
+            <div className={`credits-display ${userCredits.remaining < 0.1 ? 'low' : ''}`}>
+              <span className="credits-amount">${userCredits.remaining.toFixed(4)}</span>
+              <span className="credits-label">credits</span>
+            </div>
+          )}
+
           <div className="header-icons">
             {isAuthenticated && userAuth && (
               <div className="relative group">
@@ -1780,7 +1864,9 @@ const SidePanel = () => {
                   className={`header-icon text-white hover:text-white cursor-pointer`}
                   aria-label={'Summarize page'}
                   tabIndex={0}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
                     segment
                   </span>
                 </button>
@@ -1831,31 +1917,31 @@ const SidePanel = () => {
                   <p className="mb-4 text-base">
                     To get started, please sign in with Google or configure your API Keys in settings.
                   </p>
-                  
+
                   <div className="flex flex-col gap-3 items-center">
                     {/* Sign in with Google Button */}
                     <button
                       onClick={handleGoogleSignIn}
                       className={`px-6 py-2.5 text-sm font-medium rounded-full border-2 transition-colors flex items-center gap-2 ${
-                        isDarkMode 
-                          ? 'border-gray-400 text-gray-300 hover:border-gray-300 hover:bg-gray-800/30' 
+                        isDarkMode
+                          ? 'border-gray-400 text-gray-300 hover:border-gray-300 hover:bg-gray-800/30'
                           : 'border-gray-500 text-gray-700 hover:border-gray-600 hover:bg-gray-100/30'
                       }`}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                       </svg>
                       Sign in with Google
                     </button>
-                    
+
                     {/* Open Settings Button */}
                     <button
                       onClick={() => chrome.runtime.openOptionsPage()}
                       className={`px-6 py-2.5 text-sm font-medium rounded-full border-2 transition-colors ${
-                        isDarkMode 
-                          ? 'border-gray-400 text-gray-300 hover:border-gray-300 hover:bg-gray-800/30' 
+                        isDarkMode
+                          ? 'border-gray-400 text-gray-300 hover:border-gray-300 hover:bg-gray-800/30'
                           : 'border-gray-500 text-gray-700 hover:border-gray-600 hover:bg-gray-100/30'
                       }`}>
                       Open Settings
@@ -1880,13 +1966,13 @@ const SidePanel = () => {
                   <div className="flex-1 overflow-y-auto relative">
                     {/* Centered logo with low opacity */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <img 
-                        src="/verse-logo-white.png" 
-                        alt="Verse Logo" 
+                      <img
+                        src="/verse-logo-white.png"
+                        alt="Verse Logo"
                         className="w-48 h-48 object-contain opacity-5"
                       />
                     </div>
-                    
+
                     {/* Bookmarks on top of logo */}
                     <div className="relative z-10">
                       <BookmarkList
@@ -1900,7 +1986,7 @@ const SidePanel = () => {
                     </div>
                   </div>
                 )}
-                
+
                 <InputSection
                   currentTabMeta={currentTabMeta}
                   inputEnabled={inputEnabled}

@@ -30,7 +30,9 @@ const portToTabId = new Map<chrome.runtime.Port, number>();
 
 // Memory monitoring helper - logs current memory usage
 function logMemoryStats() {
-  logger.info(`📊 Memory Stats - Executors: ${tabExecutors.size}, Contexts: ${tabBrowserContexts.size}, Ports: ${tabPorts.size}`);
+  logger.info(
+    `📊 Memory Stats - Executors: ${tabExecutors.size}, Contexts: ${tabBrowserContexts.size}, Ports: ${tabPorts.size}`,
+  );
 }
 
 // Log memory stats every 30 seconds in development
@@ -58,13 +60,13 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(error 
 // Enable tab-specific side panels for each tab
 // NOTE: We set enabled: true but the panel won't auto-open due to openPanelOnActionClick: true
 // The panel will only open when user clicks the extension icon
-chrome.tabs.onCreated.addListener(async (tab) => {
+chrome.tabs.onCreated.addListener(async tab => {
   if (tab.id) {
     try {
       await chrome.sidePanel.setOptions({
         tabId: tab.id,
         path: `side-panel/index.html?tabId=${tab.id}`,
-        enabled: true // Enabled but not opened - user must click extension icon
+        enabled: true, // Enabled but not opened - user must click extension icon
       });
       logger.info('Tab-specific side panel enabled for tab:', tab.id);
     } catch (error) {
@@ -75,13 +77,13 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 
 // Also enable for existing tabs on extension load
 chrome.tabs.query({}).then(tabs => {
-  tabs.forEach(async (tab) => {
+  tabs.forEach(async tab => {
     if (tab.id) {
       try {
         await chrome.sidePanel.setOptions({
           tabId: tab.id,
           path: `side-panel/index.html?tabId=${tab.id}`,
-          enabled: true
+          enabled: true,
         });
       } catch (error) {
         // Ignore errors for tabs that don't support side panels
@@ -97,13 +99,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       await chrome.sidePanel.setOptions({
         tabId: tabId,
         path: `side-panel/index.html?tabId=${tabId}`,
-        enabled: true
+        enabled: true,
       });
     } catch (error) {
       // Ignore errors - tab might not support side panels
     }
   }
-  
+
   if (tabId && changeInfo.status === 'complete' && tab.url?.startsWith('http')) {
     await injectBuildDomTreeScripts(tabId);
   }
@@ -113,7 +115,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 // Only cancel executor if user explicitly cancels, not for other reasons
 chrome.debugger.onDetach.addListener(async (source, reason) => {
   logger.info('Debugger detached - tabId:', source.tabId, 'reason:', reason);
-  
+
   // Only cancel and cleanup if user explicitly canceled
   // Don't cancel for other reasons like 'target_closed', 'replaced_with_devtools', etc.
   if (reason === 'canceled_by_user') {
@@ -133,7 +135,9 @@ chrome.debugger.onDetach.addListener(async (source, reason) => {
   } else {
     // For other detach reasons (timeout, navigation, etc.), log but don't cancel
     // The Page class will attempt to reattach automatically when needed
-    logger.warning(`Debugger detached (${reason}) for tab ${source.tabId} - will attempt to reattach on next operation`);
+    logger.warning(
+      `Debugger detached (${reason}) for tab ${source.tabId} - will attempt to reattach on next operation`,
+    );
   }
 });
 
@@ -146,7 +150,7 @@ chrome.tabs.onRemoved.addListener(async tabId => {
     await context.cleanup();
     tabBrowserContexts.delete(tabId);
   }
-  
+
   // Clean up tab-specific executor and port
   const executor = tabExecutors.get(tabId);
   if (executor) {
@@ -154,16 +158,16 @@ chrome.tabs.onRemoved.addListener(async tabId => {
     await executor.cleanup();
     tabExecutors.delete(tabId);
   }
-  
+
   const port = tabPorts.get(tabId);
   if (port) {
     portToTabId.delete(port);
     tabPorts.delete(tabId);
   }
-  
+
   // Clean up task session tracking
   taskSessionTabs.delete(tabId);
-  
+
   // Also remove this tab from any other task sessions it might be part of
   for (const [originalTabId, relatedTabs] of taskSessionTabs.entries()) {
     if (relatedTabs.has(tabId)) {
@@ -197,23 +201,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         try {
           await chrome.sidePanel.setOptions({
             tabId: targetTabId,
-            enabled: false
+            enabled: false,
           });
           logger.info(`[background] Side panel closed for tab: ${targetTabId}`);
-          
+
           // Re-enable after a delay
           setTimeout(async () => {
             try {
               await chrome.sidePanel.setOptions({
                 tabId: targetTabId,
-                enabled: true
+                enabled: true,
               });
               logger.info(`[background] Side panel re-enabled for tab: ${targetTabId}`);
             } catch (e) {
               logger.error('[background] Error re-enabling side panel:', e);
             }
           }, 200);
-          
+
           sendResponse({ success: true });
         } catch (error) {
           logger.error('[background] Error closing side panel:', error);
@@ -223,7 +227,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true; // Keep channel open for async response
     }
   }
-  
+
+  if (message.type === 'GET_USER_CREDITS') {
+    // Get user credits for authenticated user
+    (async () => {
+      try {
+        const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
+        if (authResult.isAuthenticated && authResult.userId) {
+          const { getUserCredits } = await import('./services/credits');
+          const credits = await getUserCredits(authResult.userId);
+          sendResponse({ credits });
+        } else {
+          sendResponse({ credits: null });
+        }
+      } catch (error) {
+        logger.error('[background] Error getting user credits:', error);
+        sendResponse({ error: error instanceof Error ? error.message : String(error) });
+      }
+    })();
+    return true; // Keep channel open for async response
+  }
+
   // Handle other message types if needed in the future
   return false;
 });
@@ -235,11 +259,11 @@ chrome.runtime.onConnect.addListener(port => {
   // Legacy format: 'side-panel-connection'
   const isLegacyConnection = port.name === 'side-panel-connection';
   const isTabConnection = port.name.startsWith('side-panel-connection-');
-  
+
   if (isLegacyConnection || isTabConnection) {
     // Extract tab ID from connection name or wait for first message
     let tabId: number | null = null;
-    
+
     if (isTabConnection) {
       const parts = port.name.split('-');
       tabId = parseInt(parts[parts.length - 1], 10);
@@ -263,7 +287,7 @@ chrome.runtime.onConnect.addListener(port => {
             if (!message.tabId) return port.postMessage({ type: 'error', error: t('bg_errors_noTabId') });
 
             logger.info('new_task', message.tabId, message.task);
-            
+
             // Validate tab exists before proceeding
             let tabId = message.tabId;
             try {
@@ -273,22 +297,25 @@ chrome.runtime.onConnect.addListener(port => {
               logger.warning(`Tab ${tabId} no longer exists, using active tab`);
               const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
               if (!activeTab?.id) {
-                return port.postMessage({ type: 'error', error: `Tab ${tabId} no longer exists and no active tab available` });
+                return port.postMessage({
+                  type: 'error',
+                  error: `Tab ${tabId} no longer exists and no active tab available`,
+                });
               }
               tabId = activeTab.id;
               logger.info(`Using active tab ${tabId} for new_task`);
             }
-            
+
             // Get or create tab-specific browser context (use validated tabId)
             const browserContext = getOrCreateBrowserContext(tabId);
-            
+
             // Attach to the tab WITHOUT switching focus - allows background execution
             await browserContext.getPageForTab(tabId);
-            
+
             const executor = await setupExecutor(message.taskId, message.task, browserContext, tabId);
             tabExecutors.set(tabId, executor);
             subscribeToExecutorEvents(executor, tabId);
-            
+
             // If tabId changed, update the port mapping
             if (tabId !== message.tabId) {
               logger.info(`Tab ID changed from ${message.tabId} to ${tabId}, updating port mapping`);
@@ -316,7 +343,10 @@ chrome.runtime.onConnect.addListener(port => {
               logger.warning(`Tab ${tabId} no longer exists, using active tab`);
               const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
               if (!activeTab?.id) {
-                return port.postMessage({ type: 'error', error: `Tab ${tabId} no longer exists and no active tab available` });
+                return port.postMessage({
+                  type: 'error',
+                  error: `Tab ${tabId} no longer exists and no active tab available`,
+                });
               }
               tabId = activeTab.id;
               logger.info(`Using active tab ${tabId} for follow_up_task`);
@@ -339,18 +369,18 @@ chrome.runtime.onConnect.addListener(port => {
               if (executor.isRunning()) {
                 logger.warning('⚠️ Executor is already running, queueing follow-up task:', message.task);
                 executor.addFollowUpTask(message.task);
-                return port.postMessage({ 
-                  type: 'warning', 
-                  message: 'Task queued - executor is currently busy. It will run after the current task completes.' 
+                return port.postMessage({
+                  type: 'warning',
+                  message: 'Task queued - executor is currently busy. It will run after the current task completes.',
                 });
               }
-              
+
               executor.addFollowUpTask(message.task);
               // Re-subscribe to events in case the previous subscription was cleaned up
               subscribeToExecutorEvents(executor, tabId);
               const result = await executor.execute();
               logger.info('follow_up_task execution result', tabId, result);
-              
+
               // If tabId changed, notify the side panel
               if (tabId !== message.tabId) {
                 port.postMessage({ type: 'tab_changed', oldTabId: message.tabId, newTabId: tabId });
@@ -414,10 +444,10 @@ chrome.runtime.onConnect.addListener(port => {
             const isRunning = executor ? executor.isRunning() : false;
             const thinkingSteps = executor ? executor.getThinkingSteps() : [];
             logger.info('check_executor_status', message.tabId, 'running:', isRunning, 'steps:', thinkingSteps.length);
-            return port.postMessage({ 
-              type: 'executor_status', 
+            return port.postMessage({
+              type: 'executor_status',
               isRunning,
-              thinkingSteps 
+              thinkingSteps,
             });
           }
 
@@ -495,7 +525,7 @@ chrome.runtime.onConnect.addListener(port => {
               logger.info('Saving summary...');
               const { createChatHistoryStorage } = await import('@extension/storage');
               const chatStore = createChatHistoryStorage(tabId);
-              
+
               await chatStore.addMessage(result.sessionId, {
                 actor: Actors.SYSTEM,
                 content: result.summary,
@@ -518,30 +548,31 @@ chrome.runtime.onConnect.addListener(port => {
               } else {
                 logger.warning(`No port found for tab ${tabId} - summary saved to storage, UI will reload`);
               }
-              
+
               // ALWAYS send a completion signal via chrome.runtime to ensure UI updates
               // This broadcasts to all listeners including the side panel
               try {
-                chrome.runtime.sendMessage({
-                  type: 'summarize_complete',
-                  tabId,
-                  sessionId: result.sessionId,
-                }).catch((err) => {
-                  // Ignore "no receivers" error - side panel might not be open
-                  logger.debug('Runtime message not received (side panel may be closed):', err);
-                });
+                chrome.runtime
+                  .sendMessage({
+                    type: 'summarize_complete',
+                    tabId,
+                    sessionId: result.sessionId,
+                  })
+                  .catch(err => {
+                    // Ignore "no receivers" error - side panel might not be open
+                    logger.debug('Runtime message not received (side panel may be closed):', err);
+                  });
                 logger.info('Sent summarize_complete broadcast');
               } catch (broadcastError) {
                 logger.warning('Could not broadcast summarize_complete:', broadcastError);
               }
-              
+
               // Cleanup: Remove highlights and detach debugger
               await cleanupAfterSummarize(browserContext, tabId);
-              
             } catch (error) {
               const errorMsg = error instanceof Error ? error.message : String(error);
               logger.error('summarize_page failed:', errorMsg, error);
-              
+
               // Cleanup on error too
               try {
                 const tabId = message.tabId as number;
@@ -554,7 +585,7 @@ chrome.runtime.onConnect.addListener(port => {
               } catch (cleanupError) {
                 logger.warning('Error cleanup failed:', cleanupError);
               }
-              
+
               return port.postMessage({ type: 'error', error: `Failed: ${errorMsg}. Check console.` });
             }
             break;
@@ -645,14 +676,14 @@ chrome.runtime.onConnect.addListener(port => {
     port.onDisconnect.addListener(() => {
       const disconnectedTabId = portToTabId.get(port);
       logger.info('Side panel disconnected for tab:', disconnectedTabId);
-      
+
       if (disconnectedTabId) {
         // CRITICAL FIX: Don't cancel executor when side panel disconnects
         // The executor should continue running in the background
         // This allows tasks to complete even when user switches tabs
         portToTabId.delete(port);
         tabPorts.delete(disconnectedTabId);
-        
+
         logger.info('Side panel disconnected, but executor will continue running for tab:', disconnectedTabId);
         // Executor will only be cancelled via explicit 'cancel_task' command from user
       }
@@ -664,14 +695,33 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
   // Check if user is authenticated
   const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
   const isUserAuthenticated = authResult.isAuthenticated === true && authResult.userId;
-  
+
   let providers = await llmProviderStore.getAllProviders();
   let agentModels = await agentModelStore.getAllAgentModels();
-  
+
   // If user is authenticated and no providers configured, use default API keys
   if (isUserAuthenticated && Object.keys(providers).length === 0) {
+    // Initialize user credits if first time
+    const { initializeUserCredits, checkUserCredits } = await import('./services/credits');
+    await initializeUserCredits(authResult.userId);
+
+    // Check if user has remaining credits
+    const creditCheck = await checkUserCredits(authResult.userId);
+
+    if (!creditCheck.hasCredits) {
+      throw new Error(
+        `You've used all $${creditCheck.totalCredits.toFixed(2)} of free credits. ` +
+          `Please add your own API keys in Settings to continue using Verse.`,
+      );
+    }
+
     logger.info('[background] Using default API keys for authenticated user');
-    
+    logger.info('[background] Remaining credits:', `$${creditCheck.remainingCredits.toFixed(4)}`);
+
+    // Create token usage callback
+    const { TokenUsageCallbackHandler } = await import('./callbacks/tokenUsage');
+    const tokenCallback = new TokenUsageCallbackHandler(authResult.userId, 'gpt-4o-mini');
+
     // Create default provider configuration with your API key
     const defaultProvider = {
       name: 'OpenAI (Default)',
@@ -680,12 +730,12 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
       modelNames: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'],
       createdAt: Date.now(),
     };
-    
+
     providers = {
       'openai-default': defaultProvider,
     };
-    
-    // Create default agent models using gpt-4o-mini
+
+    // Create default agent models using gpt-4o-mini with callback
     agentModels = {
       [AgentNameEnum.Navigator]: {
         provider: 'openai-default',
@@ -694,6 +744,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
           temperature: 0.1,
           maxTokens: 4096,
         },
+        callbacks: [tokenCallback],
       },
       [AgentNameEnum.Planner]: {
         provider: 'openai-default',
@@ -702,6 +753,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
           temperature: 0.1,
           maxTokens: 4096,
         },
+        callbacks: [tokenCallback],
       },
     };
   } else if (Object.keys(providers).length === 0) {
@@ -789,19 +841,19 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
     try {
       // CRITICAL: Save planner/navigator messages to storage immediately
       // This ensures messages persist even if user switches tabs
-      const isThinkingEvent = 
+      const isThinkingEvent =
         (event.actor === Actors.PLANNER && event.state === ExecutionState.STEP_OK) ||
         (event.actor === Actors.NAVIGATOR && event.state === ExecutionState.STEP_OK);
-      
+
       if (isThinkingEvent && event.data?.details) {
         try {
           const { createChatHistoryStorage } = await import('@extension/storage');
           const chatStore = createChatHistoryStorage(tabId);
-          
+
           // Get or create session
           const sessions = await chatStore.getSessionsMetadata();
           let sessionId: string;
-          
+
           if (sessions.length > 0) {
             const sortedSessions = sessions.sort((a, b) => b.createdAt - a.createdAt);
             sessionId = sortedSessions[0].id;
@@ -810,33 +862,33 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
             const session = await chatStore.createSession(taskId);
             sessionId = session.id;
           }
-          
+
           // Save planner/navigator message
           const thinkingMessage = {
             actor: event.actor,
             content: event.data.details,
             timestamp: event.timestamp || Date.now(),
             messageType: 'assistant' as const,
-            taskId: event.data.taskId
+            taskId: event.data.taskId,
           };
-          
+
           await chatStore.addMessage(sessionId, thinkingMessage);
           logger.debug(`Saved ${event.actor} message to storage`);
         } catch (storageError) {
           logger.error('Failed to save thinking message:', storageError);
         }
       }
-      
+
       // CRITICAL: Save final message when task completes
       if (event.state === ExecutionState.TASK_OK || event.state === ExecutionState.TASK_FAIL) {
         try {
           const { createChatHistoryStorage } = await import('@extension/storage');
           const chatStore = createChatHistoryStorage(tabId);
-          
+
           // Get or create session
           const sessions = await chatStore.getSessionsMetadata();
           let sessionId: string;
-          
+
           if (sessions.length > 0) {
             const sortedSessions = sessions.sort((a, b) => b.createdAt - a.createdAt);
             sessionId = sortedSessions[0].id;
@@ -845,10 +897,10 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
             const session = await chatStore.createSession(taskId);
             sessionId = session.id;
           }
-          
+
           // Get thinking steps from executor
           const thinkingSteps = executor.getThinkingSteps();
-          
+
           // Save final message with thinking steps attached
           if (event.data?.details) {
             const finalMessage = {
@@ -857,13 +909,13 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
               timestamp: event.timestamp || Date.now(),
               messageType: 'assistant' as const,
               taskId: event.data.taskId,
-              thinkingSteps: thinkingSteps.length > 0 ? thinkingSteps : undefined
+              thinkingSteps: thinkingSteps.length > 0 ? thinkingSteps : undefined,
             };
-            
+
             await chatStore.addMessage(sessionId, finalMessage);
             logger.info(`Saved final message with ${thinkingSteps.length} thinking steps to storage`);
           }
-          
+
           // DON'T clear thinking steps immediately - keep them so they can be retrieved
           // when switching back to this tab. They'll be cleared when executor is deleted (after 5 min)
           // executor.clearThinkingSteps(); // REMOVED
@@ -871,10 +923,10 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
           logger.error('Failed to save final message with thinking steps:', storageError);
         }
       }
-      
+
       // Get all tabs that are part of this task session
       const relatedTabs = taskSessionTabs.get(tabId) || new Set([tabId]);
-      
+
       // Get the current active tab from the browser context
       const browserContext = tabBrowserContexts.get(tabId);
       if (browserContext) {
@@ -886,7 +938,7 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
           logger.info(`Added tab ${currentTabId} to task session for original tab ${tabId}`);
         }
       }
-      
+
       // Broadcast event to all related tabs
       // CRITICAL: Only send to the original tab that started the task
       // This prevents cross-tab event contamination when switching tabs quickly
@@ -900,7 +952,7 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
           logger.warning(`Failed to send event to tab ${tabId}:`, portError);
         }
       }
-      
+
       if (sentCount === 0) {
         logger.info(`No active ports found for task session (original tab: ${tabId}), event not sent:`, event.state);
         // NOTE: We don't save individual events to storage anymore
@@ -922,7 +974,7 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
               actor: Actors.SYSTEM,
               state: ExecutionState.TASK_FAIL,
               timestamp: Date.now(),
-              data: { details: 'Connection error: ' + (error instanceof Error ? error.message : String(error)) }
+              data: { details: 'Connection error: ' + (error instanceof Error ? error.message : String(error)) },
             });
           }
         }
@@ -941,7 +993,7 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
       if (tabExecutor) {
         await tabExecutor.cleanup();
         logger.info(`Executor for tab ${tabId} cleaned up but kept in map for follow-up tasks`);
-        
+
         // CRITICAL FIX: Delete executor after 5 minutes of inactivity to prevent memory leak
         // This allows follow-up tasks within 5 minutes, but cleans up idle executors
         setTimeout(() => {
@@ -951,7 +1003,7 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
             logger.info(`🧹 Cleaned up idle executor for tab ${tabId} after 5 minutes`);
           }
         }, 300000); // 5 minutes
-        
+
         // CRITICAL FIX: Delete browser context after 1 minute to prevent memory leak
         // Shorter timeout than executor since context holds more resources (Puppeteer, DOM)
         setTimeout(async () => {
@@ -965,7 +1017,7 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
           }
         }, 60000); // 1 minute
       }
-      
+
       // Clean up task session tracking on task completion
       taskSessionTabs.delete(tabId);
     }
@@ -975,61 +1027,66 @@ async function subscribeToExecutorEvents(executor: Executor, tabId: number) {
 // Listen for auth messages from the auth website
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   logger.info('[background] External message received:', message.type, sender?.url);
-  
+
   if (message.type === 'VERSE_AUTH_SUCCESS' && message.data) {
     const { userId, email, name } = message.data;
     const shouldOpenSidePanel = message.openSidePanel === true;
-    
+
     // Store auth data in chrome.storage
-    chrome.storage.local.set({
-      userId,
-      userEmail: email,
-      userName: name,
-      isAuthenticated: true,
-    }, async () => {
-      logger.info('[background] Auth data stored:', { userId, email, name });
-      
-      // Open side panel if requested
-      if (shouldOpenSidePanel) {
-        try {
-          // Get the current active tab
-          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-          if (tabs[0]?.id) {
-            // Open side panel for the current tab
-            await chrome.sidePanel.open({ tabId: tabs[0].id });
-            logger.info('[background] Side panel opened for authenticated user');
+    chrome.storage.local.set(
+      {
+        userId,
+        userEmail: email,
+        userName: name,
+        isAuthenticated: true,
+      },
+      async () => {
+        logger.info('[background] Auth data stored:', { userId, email, name });
+
+        // Open side panel if requested
+        if (shouldOpenSidePanel) {
+          try {
+            // Get the current active tab
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tabs[0]?.id) {
+              // Open side panel for the current tab
+              await chrome.sidePanel.open({ tabId: tabs[0].id });
+              logger.info('[background] Side panel opened for authenticated user');
+            }
+          } catch (error) {
+            logger.error('[background] Error opening side panel:', error);
           }
-        } catch (error) {
-          logger.error('[background] Error opening side panel:', error);
         }
-      }
-      
-      sendResponse({ success: true });
-      
-      // Notify all side panels about the auth success
-      chrome.runtime.sendMessage({
-        type: 'VERSE_AUTH_SUCCESS',
-        data: { userId, email, name },
-      }).catch(() => {
-        // Ignore errors if no listeners
-      });
-    });
+
+        sendResponse({ success: true });
+
+        // Notify all side panels about the auth success
+        chrome.runtime
+          .sendMessage({
+            type: 'VERSE_AUTH_SUCCESS',
+            data: { userId, email, name },
+          })
+          .catch(() => {
+            // Ignore errors if no listeners
+          });
+      },
+    );
     return true; // Keep the message channel open for sendResponse
   }
-  
+
   if (message.type === 'VERSE_AUTH_SIGNOUT') {
     logger.info('[background] VERSE_AUTH_SIGNOUT received from:', sender?.url);
     (async () => {
       logger.info('[background] Processing sign out request');
-      
+
       // CRITICAL: Set isAuthenticated to false FIRST - this is the security flag
       await chrome.storage.local.set({ isAuthenticated: false });
       logger.info('[background] isAuthenticated set to false');
-      
+
       // Clear auth data immediately
       await chrome.storage.local.remove(['userId', 'userEmail', 'userName']);
       logger.info('[background] Auth data cleared from storage');
-      
+
       // NOTIFY all side panels about the sign out - they will show sign-in page
       // We don't close the side panel, just update it to show the sign-in page
       try {
@@ -1041,13 +1098,13 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
         // This is expected if no listeners are active
         logger.info('[background] No active listeners for VERSE_AUTH_SIGNOUT (side panel may be closed)');
       }
-      
+
       logger.info('[background] Sign out complete - side panels will show sign-in page on next open');
-      
+
       sendResponse({ success: true });
     })();
     return true; // Keep the message channel open for sendResponse
   }
-  
+
   return false; // Return false for other message types
 });
