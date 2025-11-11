@@ -19,8 +19,18 @@ import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
 import { summarizePage, cleanupAfterSummarize } from './services/summarize';
+import { initializeFirebase } from './services/firebase';
+import { initializeUserCredits, getUserCredits } from './services/creditTracker';
 
 const logger = createLogger('background');
+
+// Initialize Firebase on extension load
+try {
+  initializeFirebase();
+  logger.info('[Firebase] Initialized on extension load');
+} catch (error) {
+  logger.error('[Firebase] Failed to initialize:', error);
+}
 
 // Tab-specific browser contexts, executors and ports for multi-instance support
 const tabBrowserContexts = new Map<number, BrowserContext>();
@@ -1001,6 +1011,18 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
       },
       async () => {
         logger.info('[background] Auth data stored:', { userId, email, name });
+
+        // Initialize user credits in Firestore
+        try {
+          logger.info('[Credits] Initializing credits for user:', userId);
+          const credits = await initializeUserCredits(userId);
+          logger.info('[Credits] Credits initialized:', {
+            total: credits.totalCreditsUSD,
+            remaining: credits.remainingCreditsUSD,
+          });
+        } catch (error) {
+          logger.error('[Credits] Failed to initialize user credits:', error);
+        }
 
         // Open side panel if requested
         if (shouldOpenSidePanel) {

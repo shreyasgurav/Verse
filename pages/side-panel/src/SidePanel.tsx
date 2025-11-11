@@ -1860,9 +1860,20 @@ const SidePanel = () => {
                 {t('nav_back')}
               </button>
             )}
-            {!showHistory && isAuthenticated && userCredits && (
-              <div className="text-white text-xs opacity-80" style={{ marginLeft: '12px' }}>
-                Credits: ${userCredits.remainingCreditsUSD.toFixed(2)} / ${userCredits.totalCreditsUSD.toFixed(2)}
+            {!showHistory && isAuthenticated && (
+              <div
+                className="text-white text-sm font-medium"
+                style={{ marginLeft: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {userCredits ? (
+                  <>
+                    <span style={{ opacity: 0.7 }}>💳</span>
+                    <span>
+                      ${userCredits.remainingCreditsUSD.toFixed(2)} / ${userCredits.totalCreditsUSD.toFixed(2)}
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ opacity: 0.6, fontSize: '11px' }}>Loading credits...</span>
+                )}
               </div>
             )}
           </div>
