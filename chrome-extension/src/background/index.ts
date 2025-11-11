@@ -264,18 +264,40 @@ chrome.runtime.onConnect.addListener(port => {
 
             logger.info('new_task', message.tabId, message.task);
             
-            // Get or create tab-specific browser context
-            const browserContext = getOrCreateBrowserContext(message.tabId);
+            // Validate tab exists before proceeding
+            let tabId = message.tabId;
+            try {
+              await chrome.tabs.get(tabId);
+            } catch (error) {
+              // Tab doesn't exist - use active tab as fallback
+              logger.warning(`Tab ${tabId} no longer exists, using active tab`);
+              const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              if (!activeTab?.id) {
+                return port.postMessage({ type: 'error', error: `Tab ${tabId} no longer exists and no active tab available` });
+              }
+              tabId = activeTab.id;
+              logger.info(`Using active tab ${tabId} for new_task`);
+            }
+            
+            // Get or create tab-specific browser context (use validated tabId)
+            const browserContext = getOrCreateBrowserContext(tabId);
             
             // Attach to the tab WITHOUT switching focus - allows background execution
-            await browserContext.getPageForTab(message.tabId);
+            await browserContext.getPageForTab(tabId);
             
-            const executor = await setupExecutor(message.taskId, message.task, browserContext, message.tabId);
-            tabExecutors.set(message.tabId, executor);
-            subscribeToExecutorEvents(executor, message.tabId);
+            const executor = await setupExecutor(message.taskId, message.task, browserContext, tabId);
+            tabExecutors.set(tabId, executor);
+            subscribeToExecutorEvents(executor, tabId);
+            
+            // If tabId changed, update the port mapping
+            if (tabId !== message.tabId) {
+              logger.info(`Tab ID changed from ${message.tabId} to ${tabId}, updating port mapping`);
+              // Notify the side panel about the tab change via port message
+              port.postMessage({ type: 'tab_changed', oldTabId: message.tabId, newTabId: tabId });
+            }
 
             const result = await executor.execute();
-            logger.info('new_task execution result', message.tabId, result);
+            logger.info('new_task execution result', tabId, result);
             break;
           }
 
@@ -285,8 +307,33 @@ chrome.runtime.onConnect.addListener(port => {
 
             logger.info('follow_up_task', message.tabId, message.task);
 
+            // Validate tab exists before proceeding
+            let tabId = message.tabId;
+            try {
+              await chrome.tabs.get(tabId);
+            } catch (error) {
+              // Tab doesn't exist - use active tab as fallback
+              logger.warning(`Tab ${tabId} no longer exists, using active tab`);
+              const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              if (!activeTab?.id) {
+                return port.postMessage({ type: 'error', error: `Tab ${tabId} no longer exists and no active tab available` });
+              }
+              tabId = activeTab.id;
+              logger.info(`Using active tab ${tabId} for follow_up_task`);
+            }
+
             // If executor exists for this tab, add follow-up task
-            const executor = tabExecutors.get(message.tabId);
+            // Try the validated tabId first, then fallback to original tabId
+            let executor = tabExecutors.get(tabId);
+            if (!executor && tabId !== message.tabId) {
+              executor = tabExecutors.get(message.tabId);
+              if (executor) {
+                // Move executor to new tabId
+                tabExecutors.delete(message.tabId);
+                tabExecutors.set(tabId, executor);
+                logger.info(`Moved executor from tab ${message.tabId} to ${tabId}`);
+              }
+            }
             if (executor) {
               // Check if executor is already running - if so, queue the task but don't execute yet
               if (executor.isRunning()) {
@@ -300,9 +347,14 @@ chrome.runtime.onConnect.addListener(port => {
               
               executor.addFollowUpTask(message.task);
               // Re-subscribe to events in case the previous subscription was cleaned up
-              subscribeToExecutorEvents(executor, message.tabId);
+              subscribeToExecutorEvents(executor, tabId);
               const result = await executor.execute();
-              logger.info('follow_up_task execution result', message.tabId, result);
+              logger.info('follow_up_task execution result', tabId, result);
+              
+              // If tabId changed, notify the side panel
+              if (tabId !== message.tabId) {
+                port.postMessage({ type: 'tab_changed', oldTabId: message.tabId, newTabId: tabId });
+              }
             } else {
               // executor was cleaned up, can not add follow-up task
               logger.info('follow_up_task: executor was cleaned up, can not add follow-up task');

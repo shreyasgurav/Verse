@@ -237,7 +237,24 @@ export default class BrowserContext {
   public async getPageForTab(tabId: number): Promise<Page> {
     logger.info('getPageForTab', tabId);
     
-    const page = await this._getOrCreatePage(await chrome.tabs.get(tabId));
+    // Validate that the tab exists before trying to get it
+    let tab: chrome.tabs.Tab;
+    try {
+      tab = await chrome.tabs.get(tabId);
+    } catch (error) {
+      // Tab doesn't exist - try to use the active tab as fallback
+      logger.warning(`Tab ${tabId} no longer exists, falling back to active tab`);
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab?.id) {
+        throw new Error(`No tab with id: ${tabId} and no active tab available`);
+      }
+      logger.info(`Using active tab ${activeTab.id} instead of ${tabId}`);
+      tab = activeTab;
+      // Update the tab ID to the active tab
+      tabId = activeTab.id;
+    }
+    
+    const page = await this._getOrCreatePage(tab);
     await this.attachPage(page);
     this._currentTabId = tabId; // Set as current so getCurrentPage() works
     return page;

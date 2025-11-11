@@ -1081,6 +1081,13 @@ const SidePanel = () => {
           setShowStopButton(false);
         } else if (message && message.type === 'heartbeat_ack') {
           console.log('Heartbeat acknowledged');
+        } else if (message && message.type === 'tab_changed') {
+          // Tab ID changed (e.g., tab was closed and we're using active tab now)
+          console.log('🔄 Tab ID changed:', message.oldTabId, '→', message.newTabId);
+          if (message.newTabId && message.newTabId !== tabIdRef.current) {
+            // Update tab ID and reinitialize context
+            initializeTabContext(message.newTabId);
+          }
         }
       });
 
@@ -1411,9 +1418,26 @@ const SidePanel = () => {
 
     try {
       // Use the stored tab ID (don't query active tab!)
-      const tabId = tabIdRef.current;
+      let tabId = tabIdRef.current;
       if (!tabId) {
         throw new Error('Tab ID not initialized');
+      }
+
+      // Validate that the tab still exists before sending message
+      try {
+        await chrome.tabs.get(tabId);
+      } catch (tabError) {
+        // Tab doesn't exist (might have been closed), reinitialize with active tab
+        console.warn('⚠️ Tab ID', tabId, 'no longer exists, reinitializing with active tab');
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs[0]?.id) {
+          const newTabId = tabs[0].id;
+          console.log('🔄 Reinitializing with active tab:', newTabId);
+          await initializeTabContext(newTabId);
+          tabId = newTabId;
+        } else {
+          throw new Error('No active tab available');
+        }
       }
 
       setInputEnabled(false);
