@@ -6,6 +6,7 @@ import {
   initializeUserCredits as initFirestoreCredits,
   type UserCredits,
 } from './firestoreCredits';
+import { hasCreditsInCache, getCachedCredits, updateCachedCredits } from './creditCache';
 
 const logger = createLogger('CreditTracker');
 
@@ -85,18 +86,18 @@ export function calculateCost(modelName: string, inputTokens: number, outputToke
 
 /**
  * Track usage for an authenticated user (Firestore)
+ * Updates Firestore asynchronously without blocking
  * @param userId - User ID from authentication
  * @param modelName - Model name used
  * @param inputTokens - Input tokens
  * @param outputTokens - Output tokens
- * @returns Updated user credits
  */
 export async function trackUsage(
   userId: string,
   modelName: string,
   inputTokens: number,
   outputTokens: number,
-): Promise<UserCredits> {
+): Promise<void> {
   const cost = calculateCost(modelName, inputTokens, outputTokens);
 
   logger.info('[CreditTracker] Tracking usage:', {
@@ -107,37 +108,74 @@ export async function trackUsage(
     cost: cost.toFixed(6),
   });
 
-  // Update user credits in Firestore
-  const updatedCredits = await addFirestoreUsage(userId, cost);
+  // Get current credits from cache
+  const currentCredits = await getCachedCredits(userId);
+  if (!currentCredits) {
+    logger.warning('[CreditTracker] No credits in cache, skipping tracking');
+    return;
+  }
 
-  logger.info('[CreditTracker] Updated credits in Firestore:', {
-    userId,
-    used: updatedCredits.usedCreditsUSD.toFixed(4),
-    remaining: updatedCredits.remainingCreditsUSD.toFixed(4),
-    total: updatedCredits.totalCreditsUSD.toFixed(2),
+  const newUsed = currentCredits.usedCreditsUSD + cost;
+  const newRemaining = Math.max(0, currentCredits.totalCreditsUSD - newUsed);
+
+  // Update cache immediately for instant UI updates
+  updateCachedCredits(userId, newUsed, currentCredits.totalCreditsUSD);
+
+  // Update chrome.storage.local for UI display (instant)
+  await chrome.storage.local.set({
+    [`user_credits_${userId}`]: {
+      userId,
+      totalCreditsUSD: currentCredits.totalCreditsUSD,
+      usedCreditsUSD: newUsed,
+      remainingCreditsUSD: newRemaining,
+      lastUpdated: Date.now(),
+      createdAt: Date.now(),
+    },
   });
 
-  // Also update chrome.storage.local for UI display
-  await chrome.storage.local.set({ [`user_credits_${userId}`]: updatedCredits });
-
-  return updatedCredits;
+  // Update Firestore in background (don't await - fire and forget)
+  addFirestoreUsage(userId, cost)
+    .then(updatedCredits => {
+      logger.info('[CreditTracker] Updated credits in Firestore:', {
+        userId,
+        used: updatedCredits.usedCreditsUSD.toFixed(4),
+        remaining: updatedCredits.remainingCreditsUSD.toFixed(4),
+        total: updatedCredits.totalCreditsUSD.toFixed(2),
+      });
+    })
+    .catch(error => {
+      logger.error('[CreditTracker] Failed to update Firestore (non-blocking):', error);
+      // Don't throw - this is async background update
+    });
 }
 
 /**
- * Check if a user has remaining credits before making an API call (Firestore)
+ * Check if a user has remaining credits before making an API call
+ * Uses in-memory cache - FAST, no network call
  * @param userId - User ID
  * @returns true if user has credits, false otherwise
  */
 export async function checkUserHasCredits(userId: string): Promise<boolean> {
-  return await checkFirestoreCredits(userId);
+  return await hasCreditsInCache(userId);
 }
 
 /**
- * Get user credits (Firestore)
+ * Get user credits (uses cache first, then Firestore)
  * @param userId - User ID
  * @returns User credits or null if not found
  */
 export async function getUserCredits(userId: string): Promise<UserCredits | null> {
+  const cached = await getCachedCredits(userId);
+  if (cached) {
+    return {
+      userId,
+      totalCreditsUSD: cached.totalCreditsUSD,
+      usedCreditsUSD: cached.usedCreditsUSD,
+      remainingCreditsUSD: cached.remainingCreditsUSD,
+      lastUpdated: Date.now(),
+      createdAt: Date.now(),
+    };
+  }
   return await getFirestoreCredits(userId);
 }
 

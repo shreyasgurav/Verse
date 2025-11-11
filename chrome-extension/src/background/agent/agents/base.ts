@@ -168,9 +168,11 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
           rawContent: response.raw?.content?.slice(0, 500) + (response.raw?.content?.length > 500 ? '...' : ''),
         });
 
-        // Track usage if using default keys and we have usage data
+        // Track usage if using default keys and we have usage data (non-blocking)
         if (isUsingDefaultKeys && userId && response.raw) {
-          await this.trackTokenUsage(userId, response.raw);
+          this.trackTokenUsage(userId, response.raw).catch(err =>
+            logger.warning('[CreditTracker] Failed to track usage (non-blocking):', err),
+          );
         }
 
         if (response.parsed) {
@@ -199,9 +201,11 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
         ...this.callOptions,
       });
 
-      // Track usage for manual extraction mode if using default keys
+      // Track usage for manual extraction mode if using default keys (non-blocking)
       if (isUsingDefaultKeys && userId && response) {
-        await this.trackTokenUsage(userId, response);
+        this.trackTokenUsage(userId, response).catch(err =>
+          logger.warning('[CreditTracker] Failed to track usage (non-blocking):', err),
+        );
       }
 
       if (typeof response.content === 'string') {
