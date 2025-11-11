@@ -40,26 +40,7 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
 
   // If user is authenticated and no providers configured, use default API keys
   if (isUserAuthenticated && Object.keys(providers).length === 0) {
-    // Initialize user credits if first time
-    const { initializeUserCredits, checkUserCredits } = await import('./credits');
-    await initializeUserCredits(authResult.userId);
-
-    // Check if user has remaining credits
-    const creditCheck = await checkUserCredits(authResult.userId);
-
-    if (!creditCheck.hasCredits) {
-      throw new Error(
-        `You've used all $${creditCheck.totalCredits.toFixed(2)} of free credits. ` +
-          `Please add your own API keys in Settings to continue using Verse.`,
-      );
-    }
-
     logger.info('[summarize] Using default API keys for authenticated user');
-    logger.info('[summarize] Remaining credits:', `$${creditCheck.remainingCredits.toFixed(4)}`);
-
-    // Create token usage callback
-    const { TokenUsageCallbackHandler } = await import('../callbacks/tokenUsage');
-    const tokenCallback = new TokenUsageCallbackHandler(authResult.userId, 'gpt-4o-mini');
 
     // Create default provider configuration with your API key
     const defaultProvider = {
@@ -74,7 +55,7 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
       'openai-default': defaultProvider,
     };
 
-    // Create default agent models using gpt-4o-mini with callback
+    // Create default agent models using gpt-4o-mini
     agentModels = {
       [AgentNameEnum.Navigator]: {
         provider: 'openai-default',
@@ -83,7 +64,6 @@ export async function summarizePage(options: SummarizePageOptions): Promise<Summ
           temperature: 0.1,
           maxTokens: 4096,
         },
-        callbacks: [tokenCallback],
       },
     };
   }

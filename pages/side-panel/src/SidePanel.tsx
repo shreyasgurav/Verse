@@ -15,6 +15,8 @@ import {
   AgentNameEnum,
   getDefaultAgentModelParams,
   type ChatHistoryStorage,
+  userCreditsStore,
+  type UserCredits,
 } from '@extension/storage';
 import favoritesStorage, { type FavoritePrompt } from '@extension/storage/lib/prompt/favorites';
 import { t } from '@extension/i18n';
@@ -129,11 +131,7 @@ const SidePanel = () => {
   const [currentTabMeta, setCurrentTabMeta] = useState<{ title: string; icon?: string; url?: string } | null>(null);
   const [userAuth, setUserAuth] = useState<{ userId: string; email: string; name: string } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [userCredits, setUserCredits] = useState<{
-    remaining: number;
-    total: number;
-    used: number;
-  } | null>(null);
+  const [userCredits, setUserCredits] = useState<UserCredits | null>(null);
 
   // Tab-specific state
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
@@ -684,6 +682,7 @@ const SidePanel = () => {
   // Load user auth from storage and handle auth callbacks
   useEffect(() => {
     let authCheckInterval: NodeJS.Timeout | null = null;
+    let creditsCheckInterval: NodeJS.Timeout | null = null;
 
     const loadUserAuth = async () => {
       try {
@@ -697,8 +696,8 @@ const SidePanel = () => {
           });
           setIsAuthenticated(true);
 
-          // Load user credits
-          loadUserCredits();
+          // Load or initialize user credits
+          await loadUserCredits(result.userId);
         } else {
           // Clear auth state if not authenticated
           setUserAuth(null);
@@ -713,19 +712,18 @@ const SidePanel = () => {
       }
     };
 
-    const loadUserCredits = () => {
-      if (!userAuth?.userId) return;
-
-      chrome.runtime.sendMessage({ type: 'GET_USER_CREDITS' }, response => {
-        if (response?.credits) {
-          setUserCredits({
-            remaining: response.credits.remainingCredits,
-            total: response.credits.totalCredits,
-            used: response.credits.usedCredits,
-          });
-          console.log('[SidePanel] Loaded credits:', response.credits);
+    const loadUserCredits = async (userId: string) => {
+      try {
+        let credits = await userCreditsStore.getUserCredits(userId);
+        if (!credits) {
+          // Initialize credits for new user
+          credits = await userCreditsStore.initializeUser(userId);
+          console.log('[Credits] Initialized credits for user:', userId, credits);
         }
-      });
+        setUserCredits(credits);
+      } catch (error) {
+        console.error('[Credits] Error loading user credits:', error);
+      }
     };
 
     // Continuously check authentication status every 2 seconds
@@ -800,6 +798,13 @@ const SidePanel = () => {
     const pollInterval = setInterval(() => {
       loadUserAuth();
     }, 1000); // Check every second
+
+    // Poll for credit updates every 5 seconds when authenticated
+    creditsCheckInterval = setInterval(async () => {
+      if (isAuthenticated && userAuth?.userId) {
+        await loadUserCredits(userAuth.userId);
+      }
+    }, 5000);
 
     // SECURITY: Continuously verify authentication status every 2 seconds
     authCheckInterval = setInterval(() => {
@@ -1150,14 +1155,6 @@ const SidePanel = () => {
             // Update tab ID and reinitialize context
             initializeTabContext(message.newTabId);
           }
-        } else if (message && message.type === 'CREDITS_UPDATED') {
-          // Update credits display when background sends update
-          console.log('[SidePanel] Credits updated:', message.data);
-          setUserCredits({
-            remaining: message.data.remainingCredits,
-            total: message.data.totalCredits,
-            used: message.data.usedCredits,
-          });
         }
       });
 
@@ -1840,16 +1837,12 @@ const SidePanel = () => {
                 {t('nav_back')}
               </button>
             )}
+            {!showHistory && isAuthenticated && userCredits && (
+              <div className="text-white text-xs opacity-80" style={{ marginLeft: '12px' }}>
+                Credits: ${userCredits.remainingCreditsUSD.toFixed(2)} / ${userCredits.totalCreditsUSD.toFixed(2)}
+              </div>
+            )}
           </div>
-
-          {/* Credits display - only show if authenticated and using default keys */}
-          {isAuthenticated && userAuth && userCredits && (
-            <div className={`credits-display ${userCredits.remaining < 0.1 ? 'low' : ''}`}>
-              <span className="credits-amount">${userCredits.remaining.toFixed(4)}</span>
-              <span className="credits-label">credits</span>
-            </div>
-          )}
-
           <div className="header-icons">
             {isAuthenticated && userAuth && (
               <div className="relative group">

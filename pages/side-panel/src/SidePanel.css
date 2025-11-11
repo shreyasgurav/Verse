@@ -57,67 +57,10 @@ code {
 /* Used classes from the component */
 .header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-/* Credits display in header */
-.credits-display {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  margin: 0 auto;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.credits-amount {
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-  line-height: 1;
-  margin-bottom: 2px;
-}
-
-.credits-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  line-height: 1;
-}
-
-/* Warning state when credits are low */
-.credits-display.low {
-  background: rgba(255, 193, 7, 0.25);
-  border-color: rgba(255, 193, 7, 0.4);
-  animation: pulse-warning 2s ease-in-out infinite;
-}
-
-.credits-display.low .credits-amount {
-  color: #ffc107;
-}
-
-.credits-display.low .credits-label {
-  color: rgba(255, 193, 7, 0.9);
-}
-
-@keyframes pulse-warning {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.8;
-  }
+  padding: 0.75rem;
+  background-color: transparent;
 }
 
 .header-logo {
@@ -135,81 +78,129 @@ code {
   color: white;
   cursor: pointer;
   transition: color 0.2s ease;
+  opacity: 0.8;
 }
 
 .header-icon:hover {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-/* Flex container for messages */
-.messages-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-/* Utility classes */
-.text-sky-600 {
-  color: #0284c7;
-}
-
-.text-sky-300 {
-  color: #7dd3fc;
-}
-
-/* Chat input styling */
-.chat-input-container {
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  align-items: flex-end;
-  background-color: #242424;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Material symbols icons */
-.material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-}
-
-/* Instant tooltip for hover actions */
-.instant-tooltip {
-  opacity: 0;
-  pointer-events: none;
-  position: absolute;
-  bottom: -40px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.9);
   color: white;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  white-space: nowrap;
-  transition: opacity 0.2s ease;
-  z-index: 1000;
-}
-
-.relative.group:hover .instant-tooltip {
   opacity: 1;
 }
 
-/* Tab chip styles */
+/* Instant tooltip for header icons */
+.instant-tooltip {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.group:hover .instant-tooltip {
+  opacity: 1; /* show instantly with no delay */
+}
+
+/* Tab chip above input */
 .tab-chip {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
-  margin: 0 8px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: calc(100% - 50px); /* narrower, centered */
+  margin: 8px auto 0 auto; /* align with input padding */
+  background-color: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-bottom: none; /* connect to input */
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding: 6px 12px;
+  color: #e5e7eb;
+  position: relative;
+  z-index: 2;
 }
 
 .tab-chip-title {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 250px;
+  font-size: 12px;
+}
+
+/* Slight overlap so chip visually connects with input */
+.chat-input-container {
+  margin-top: 0; /* pull input up under the chip more */
+  padding-top: 0; /* remove top padding gap */
+}
+
+.send-button {
+  color: #19C2FF;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  opacity: 0.8;
+}
+
+.send-button:hover {
+  color: #0073DC;
+  opacity: 1;
+}
+
+.send-button:disabled {
+  color: #CBD5E1;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Hide scrollbar */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
+}
+
+/* Dark mode text and background colors */
+@media (prefers-color-scheme: dark) {
+  .dark-mode-text {
+    color: #e2e8f0 !important; /* slate-200 */
+  }
+  
+  .dark-mode-bg {
+    background-color: #1e293b !important; /* slate-800 */
+  }
+  
+  .dark-mode-border {
+    border-color: #475569 !important; /* slate-600 */
+  }
+}
+
+/* Glowing animation for thinking text - left to right shimmer */
+@keyframes glow {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+.animate-glow {
+  background: linear-gradient(
+    90deg,
+    rgba(156, 163, 175, 0.6) 0%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(156, 163, 175, 0.6) 100%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: glow 2s linear infinite;
 }

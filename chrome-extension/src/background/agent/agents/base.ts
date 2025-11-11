@@ -8,6 +8,7 @@ import type { Action } from '../actions/builder';
 import { convertInputMessages, extractJsonFromModelOutput, removeThinkTags } from '../messages/utils';
 import { isAbortedError, ResponseParseError } from './errors';
 import { ProviderTypeEnum } from '@extension/storage';
+import { trackUsage, checkUserHasCredits } from '../../services/creditTracker';
 
 const logger = createLogger('agent');
 
@@ -119,6 +120,28 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
   }
 
   async invoke(inputMessages: BaseMessage[]): Promise<this['ModelOutput']> {
+    // Check user credits before making API call (if using default API keys)
+    const isUsingDefaultKeys = await this.isUsingDefaultApiKeys();
+    let userId: string | null = null;
+
+    if (isUsingDefaultKeys) {
+      // Get current user ID from storage
+      const authData = await chrome.storage.local.get(['userId', 'isAuthenticated']);
+      if (authData.isAuthenticated && authData.userId) {
+        userId = authData.userId;
+
+        // Check if user has remaining credits
+        const hasCredits = await checkUserHasCredits(userId);
+        if (!hasCredits) {
+          const error = new Error(
+            'You have used all your free credits ($0.50). Please configure your own API keys in Settings to continue using Verse.',
+          );
+          logger.error('[CreditTracker] User out of credits:', userId);
+          throw error;
+        }
+      }
+    }
+
     // Use structured output
     if (this.withStructuredOutput) {
       logger.debug(`[${this.modelName}] Preparing structured output call with schema:`, {
@@ -144,6 +167,11 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
           hasRaw: !!response.raw,
           rawContent: response.raw?.content?.slice(0, 500) + (response.raw?.content?.length > 500 ? '...' : ''),
         });
+
+        // Track usage if using default keys and we have usage data
+        if (isUsingDefaultKeys && userId && response.raw) {
+          await this.trackTokenUsage(userId, response.raw);
+        }
 
         if (response.parsed) {
           logger.debug(`[${this.modelName}] Successfully parsed structured output`);
@@ -171,6 +199,11 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
         ...this.callOptions,
       });
 
+      // Track usage for manual extraction mode if using default keys
+      if (isUsingDefaultKeys && userId && response) {
+        await this.trackTokenUsage(userId, response);
+      }
+
       if (typeof response.content === 'string') {
         response.content = removeThinkTags(response.content);
         try {
@@ -192,6 +225,55 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
     const errorMessage = `Failed to parse response from ${this.modelName}`;
     logger.error(errorMessage);
     throw new ResponseParseError('Could not parse response');
+  }
+
+  /**
+   * Check if the current agent is using default API keys
+   */
+  private async isUsingDefaultApiKeys(): Promise<boolean> {
+    // Check if the provider is 'openai-default' which means using default keys
+    return this.provider === 'openai-default';
+  }
+
+  /**
+   * Track token usage after an API call
+   */
+  private async trackTokenUsage(userId: string, response: any): Promise<void> {
+    try {
+      // Extract usage information from response
+      // LangChain responses include usage_metadata or response_metadata
+      let inputTokens = 0;
+      let outputTokens = 0;
+
+      // Try response_metadata.usage first (OpenAI format)
+      if (response.response_metadata?.usage) {
+        inputTokens = response.response_metadata.usage.prompt_tokens || 0;
+        outputTokens = response.response_metadata.usage.completion_tokens || 0;
+      }
+      // Try usage_metadata (newer LangChain format)
+      else if (response.usage_metadata) {
+        inputTokens = response.usage_metadata.input_tokens || 0;
+        outputTokens = response.usage_metadata.output_tokens || 0;
+      }
+      // Try direct usage field
+      else if (response.usage) {
+        inputTokens = response.usage.prompt_tokens || response.usage.input_tokens || 0;
+        outputTokens = response.usage.completion_tokens || response.usage.output_tokens || 0;
+      }
+
+      if (inputTokens > 0 || outputTokens > 0) {
+        await trackUsage(userId, this.modelName, inputTokens, outputTokens);
+      } else {
+        logger.warning('[CreditTracker] No token usage found in response:', {
+          hasResponseMetadata: !!response.response_metadata,
+          hasUsageMetadata: !!response.usage_metadata,
+          hasUsage: !!response.usage,
+        });
+      }
+    } catch (error) {
+      logger.error('[CreditTracker] Failed to track usage:', error);
+      // Don't throw - tracking errors shouldn't break the agent
+    }
   }
 
   // Execute the agent and return the result

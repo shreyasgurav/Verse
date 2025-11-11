@@ -228,26 +228,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
 
-  if (message.type === 'GET_USER_CREDITS') {
-    // Get user credits for authenticated user
-    (async () => {
-      try {
-        const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
-        if (authResult.isAuthenticated && authResult.userId) {
-          const { getUserCredits } = await import('./services/credits');
-          const credits = await getUserCredits(authResult.userId);
-          sendResponse({ credits });
-        } else {
-          sendResponse({ credits: null });
-        }
-      } catch (error) {
-        logger.error('[background] Error getting user credits:', error);
-        sendResponse({ error: error instanceof Error ? error.message : String(error) });
-      }
-    })();
-    return true; // Keep channel open for async response
-  }
-
   // Handle other message types if needed in the future
   return false;
 });
@@ -701,26 +681,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
 
   // If user is authenticated and no providers configured, use default API keys
   if (isUserAuthenticated && Object.keys(providers).length === 0) {
-    // Initialize user credits if first time
-    const { initializeUserCredits, checkUserCredits } = await import('./services/credits');
-    await initializeUserCredits(authResult.userId);
-
-    // Check if user has remaining credits
-    const creditCheck = await checkUserCredits(authResult.userId);
-
-    if (!creditCheck.hasCredits) {
-      throw new Error(
-        `You've used all $${creditCheck.totalCredits.toFixed(2)} of free credits. ` +
-          `Please add your own API keys in Settings to continue using Verse.`,
-      );
-    }
-
     logger.info('[background] Using default API keys for authenticated user');
-    logger.info('[background] Remaining credits:', `$${creditCheck.remainingCredits.toFixed(4)}`);
-
-    // Create token usage callback
-    const { TokenUsageCallbackHandler } = await import('./callbacks/tokenUsage');
-    const tokenCallback = new TokenUsageCallbackHandler(authResult.userId, 'gpt-4o-mini');
 
     // Create default provider configuration with your API key
     const defaultProvider = {
@@ -735,7 +696,7 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
       'openai-default': defaultProvider,
     };
 
-    // Create default agent models using gpt-4o-mini with callback
+    // Create default agent models using gpt-4o-mini
     agentModels = {
       [AgentNameEnum.Navigator]: {
         provider: 'openai-default',
@@ -744,7 +705,6 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
           temperature: 0.1,
           maxTokens: 4096,
         },
-        callbacks: [tokenCallback],
       },
       [AgentNameEnum.Planner]: {
         provider: 'openai-default',
@@ -753,7 +713,6 @@ async function setupExecutor(taskId: string, task: string, browserContext: Brows
           temperature: 0.1,
           maxTokens: 4096,
         },
-        callbacks: [tokenCallback],
       },
     };
   } else if (Object.keys(providers).length === 0) {
