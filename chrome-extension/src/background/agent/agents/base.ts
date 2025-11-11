@@ -130,9 +130,11 @@ export abstract class BaseAgent<T extends z.ZodType, M = unknown> {
       if (authData.isAuthenticated && authData.userId) {
         userId = authData.userId;
 
-        // Check if user has remaining credits
-        const hasCredits = await checkUserHasCredits(userId);
-        if (!hasCredits) {
+        // Quick check from local storage first (instant, no network call)
+        const localCredits = await chrome.storage.local.get([`user_credits_${userId}`]);
+        const credits = localCredits[`user_credits_${userId}`];
+
+        if (credits && credits.remainingCreditsUSD <= 0) {
           const error = new Error(
             'You have used all your free credits ($0.50). Please configure your own API keys in Settings to continue using Verse.',
           );

@@ -85,8 +85,8 @@ export function calculateCost(modelName: string, inputTokens: number, outputToke
 }
 
 /**
- * Track usage for an authenticated user (Firestore)
- * Updates Firestore asynchronously without blocking
+ * Track usage for an authenticated user
+ * Updates storage instantly, Firestore in background (non-blocking)
  * @param userId - User ID from authentication
  * @param modelName - Model name used
  * @param inputTokens - Input tokens
@@ -102,61 +102,82 @@ export async function trackUsage(
 
   logger.info('[CreditTracker] Tracking usage:', {
     userId,
-    modelName,
-    inputTokens,
-    outputTokens,
     cost: cost.toFixed(6),
   });
 
-  // Get current credits from cache
-  const currentCredits = await getCachedCredits(userId);
+  // Get current credits from local storage (instant, no network)
+  const result = await chrome.storage.local.get([`user_credits_${userId}`]);
+  const currentCredits = result[`user_credits_${userId}`];
+
   if (!currentCredits) {
-    logger.warning('[CreditTracker] No credits in cache, skipping tracking');
+    logger.warning('[CreditTracker] No credits in storage, skipping tracking');
     return;
   }
 
   const newUsed = currentCredits.usedCreditsUSD + cost;
   const newRemaining = Math.max(0, currentCredits.totalCreditsUSD - newUsed);
 
-  // Update cache immediately for instant UI updates
-  updateCachedCredits(userId, newUsed, currentCredits.totalCreditsUSD);
+  // Update chrome.storage.local FIRST for instant UI updates
+  const updatedCredits = {
+    userId,
+    totalCreditsUSD: currentCredits.totalCreditsUSD,
+    usedCreditsUSD: newUsed,
+    remainingCreditsUSD: newRemaining,
+    lastUpdated: Date.now(),
+    createdAt: currentCredits.createdAt || Date.now(),
+  };
 
-  // Update chrome.storage.local for UI display (instant)
   await chrome.storage.local.set({
-    [`user_credits_${userId}`]: {
-      userId,
-      totalCreditsUSD: currentCredits.totalCreditsUSD,
-      usedCreditsUSD: newUsed,
-      remainingCreditsUSD: newRemaining,
-      lastUpdated: Date.now(),
-      createdAt: Date.now(),
-    },
+    [`user_credits_${userId}`]: updatedCredits,
   });
+
+  logger.info('[CreditTracker] ✅ Updated local storage instantly');
+
+  // Update cache
+  updateCachedCredits(userId, newUsed, currentCredits.totalCreditsUSD);
 
   // Update Firestore in background (don't await - fire and forget)
   addFirestoreUsage(userId, cost)
-    .then(updatedCredits => {
-      logger.info('[CreditTracker] Updated credits in Firestore:', {
-        userId,
-        used: updatedCredits.usedCreditsUSD.toFixed(4),
-        remaining: updatedCredits.remainingCreditsUSD.toFixed(4),
-        total: updatedCredits.totalCreditsUSD.toFixed(2),
+    .then(() => {
+      logger.info('[CreditTracker] ✅ Firestore updated:', {
+        remaining: newRemaining.toFixed(4),
       });
     })
     .catch(error => {
-      logger.error('[CreditTracker] Failed to update Firestore (non-blocking):', error);
-      // Don't throw - this is async background update
+      logger.error('[CreditTracker] Firestore update failed (non-critical):', error);
     });
 }
 
 /**
  * Check if a user has remaining credits before making an API call
- * Uses in-memory cache - FAST, no network call
+ * Reads from local storage - INSTANT, no network call
  * @param userId - User ID
  * @returns true if user has credits, false otherwise
  */
 export async function checkUserHasCredits(userId: string): Promise<boolean> {
-  return await hasCreditsInCache(userId);
+  try {
+    const result = await chrome.storage.local.get([`user_credits_${userId}`]);
+    const credits = result[`user_credits_${userId}`];
+
+    if (!credits) {
+      // New user, assume they have credits
+      logger.info('[CreditTracker] No credits found, assuming new user has credits');
+      return true;
+    }
+
+    const hasCredits = credits.remainingCreditsUSD > 0;
+    logger.debug('[CreditTracker] Credit check:', {
+      userId,
+      remaining: credits.remainingCreditsUSD,
+      hasCredits,
+    });
+
+    return hasCredits;
+  } catch (error) {
+    logger.error('[CreditTracker] Error checking credits:', error);
+    // Fail open - allow the request
+    return true;
+  }
 }
 
 /**
@@ -180,15 +201,37 @@ export async function getUserCredits(userId: string): Promise<UserCredits | null
 }
 
 /**
- * Initialize credits for a new user (Firestore)
+ * Initialize credits for a new user
+ * Saves to storage first (instant), then Firestore (async)
  * @param userId - User ID
  * @returns User credits
  */
 export async function initializeUserCredits(userId: string): Promise<UserCredits> {
-  const credits = await initFirestoreCredits(userId);
+  // Create initial credits object
+  const initialCredits: UserCredits = {
+    userId,
+    totalCreditsUSD: 0.5,
+    usedCreditsUSD: 0,
+    remainingCreditsUSD: 0.5,
+    lastUpdated: Date.now(),
+    createdAt: Date.now(),
+  };
 
-  // Also save to chrome.storage.local for UI display
-  await chrome.storage.local.set({ [`user_credits_${userId}`]: credits });
+  // Save to chrome.storage.local FIRST for instant UI display
+  await chrome.storage.local.set({ [`user_credits_${userId}`]: initialCredits });
+  logger.info('[CreditTracker] ✅ Saved initial credits to local storage');
 
-  return credits;
+  // Update cache
+  updateCachedCredits(userId, 0, 0.5);
+
+  // Create in Firestore in background (don't block)
+  initFirestoreCredits(userId)
+    .then(credits => {
+      logger.info('[CreditTracker] ✅ Firestore document created:', credits);
+    })
+    .catch(error => {
+      logger.error('[CreditTracker] Firestore creation failed (non-critical):', error);
+    });
+
+  return initialCredits;
 }
