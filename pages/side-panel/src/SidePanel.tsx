@@ -745,6 +745,7 @@ const SidePanel = () => {
             });
             setUserAuth(null);
             setIsAuthenticated(false);
+            setUserCredits(null);
             // Trigger model configuration check to show sign-in page
             checkModelConfiguration();
           }
@@ -763,6 +764,12 @@ const SidePanel = () => {
     // Listen for storage changes (when auth happens in another tab)
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
       if (areaName === 'local') {
+        // Check for credit updates
+        if (changes['user-credits'] && userAuth?.userId) {
+          console.log('[Credits] Storage change detected, reloading credits');
+          loadUserCredits(userAuth.userId);
+        }
+
         // Check for auth-related changes
         if (changes.userId || changes.userEmail || changes.userName || changes.isAuthenticated) {
           // If isAuthenticated was removed or set to false, clear auth state immediately
@@ -775,6 +782,7 @@ const SidePanel = () => {
             );
             setUserAuth(null);
             setIsAuthenticated(false);
+            setUserCredits(null);
             // Trigger model configuration check to show sign-in page
             checkModelConfiguration();
           } else if (changes.isAuthenticated?.newValue === true) {
@@ -799,12 +807,12 @@ const SidePanel = () => {
       loadUserAuth();
     }, 1000); // Check every second
 
-    // Poll for credit updates every 5 seconds when authenticated
+    // Poll for credit updates every 2 seconds when authenticated (for immediate updates)
     creditsCheckInterval = setInterval(async () => {
       if (isAuthenticated && userAuth?.userId) {
         await loadUserCredits(userAuth.userId);
       }
-    }, 5000);
+    }, 2000);
 
     // SECURITY: Continuously verify authentication status every 2 seconds
     authCheckInterval = setInterval(() => {
