@@ -115,6 +115,7 @@ const SidePanel = () => {
   const taskTimeoutRef = useRef<number | null>(null);
   const [currentTabMeta, setCurrentTabMeta] = useState<{ title: string; icon?: string; url?: string } | null>(null);
   const [userAuth, setUserAuth] = useState<{ userId: string; email: string; name: string } | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   
   // Tab-specific state
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
@@ -667,13 +668,16 @@ const SidePanel = () => {
             email: result.userEmail || '',
             name: result.userName || '',
           });
+          setIsAuthenticated(true);
         } else {
           // Clear auth state if not authenticated
           setUserAuth(null);
+          setIsAuthenticated(false);
         }
       } catch (error) {
         console.error('Error loading user auth:', error);
         setUserAuth(null);
+        setIsAuthenticated(false);
       }
     };
     
@@ -683,14 +687,24 @@ const SidePanel = () => {
         const result = await chrome.storage.local.get(['isAuthenticated', 'userId']);
         
         // If authentication is lost, close the side panel immediately
-        const isAuthenticated = result.isAuthenticated === true;
+        const storageIsAuthenticated = result.isAuthenticated === true;
         const hasUserId = !!result.userId;
         
-        if (!isAuthenticated && (userAuth !== null || hasUserId)) {
-          console.log('[SidePanel] Authentication lost, showing sign-in page', { isAuthenticated, hasUserId, userAuth });
-          setUserAuth(null);
-          // Trigger model configuration check to show sign-in page
-          checkModelConfiguration();
+        if (!storageIsAuthenticated) {
+          // Not authenticated in storage - clear state if it was previously set
+          if (isAuthenticated || userAuth !== null || hasUserId) {
+            console.log('[SidePanel] Authentication lost, showing sign-in page', { storageIsAuthenticated, hasUserId, userAuth });
+            setUserAuth(null);
+            setIsAuthenticated(false);
+            // Trigger model configuration check to show sign-in page
+            checkModelConfiguration();
+          }
+        } else if (storageIsAuthenticated && hasUserId) {
+          // Authenticated in storage - ensure state is set
+          if (!isAuthenticated) {
+            setIsAuthenticated(true);
+            loadUserAuth();
+          }
         }
       } catch (error) {
         console.error('[SidePanel] Error checking auth status:', error);
@@ -707,11 +721,13 @@ const SidePanel = () => {
               (changes.isAuthenticated?.oldValue === true && changes.isAuthenticated?.newValue === undefined)) {
             console.log('[SidePanel] Storage change: Auth state changed to false/undefined, clearing auth and showing sign-in page');
             setUserAuth(null);
+            setIsAuthenticated(false);
             // Trigger model configuration check to show sign-in page
             checkModelConfiguration();
           } else if (changes.isAuthenticated?.newValue === true) {
             // Auth was set to true, reload auth data
             console.log('[SidePanel] Storage change: Auth state changed to true, loading auth data');
+            setIsAuthenticated(true);
             loadUserAuth();
           } else {
             // Other auth-related changes, reload auth data
@@ -743,6 +759,7 @@ const SidePanel = () => {
         const { userId, email, name } = message.data;
         const authData = { userId, email, name };
         setUserAuth(authData);
+        setIsAuthenticated(true);
         chrome.storage.local.set({ userId, userEmail: email, userName: name, isAuthenticated: true });
         // Reload model configuration check
         checkModelConfiguration();
@@ -750,6 +767,7 @@ const SidePanel = () => {
         // Clear auth state immediately
         console.log('[SidePanel] VERSE_AUTH_SIGNOUT received, clearing auth and showing sign-in page');
         setUserAuth(null);
+        setIsAuthenticated(false);
         // The background script has already cleared storage, just update UI
         checkModelConfiguration();
       }
@@ -783,13 +801,17 @@ const SidePanel = () => {
           if (chrome.runtime.lastError || !tab) {
             // Tab was closed, check for auth data
             clearInterval(checkTabClosed);
-            chrome.storage.local.get(['userId', 'userEmail', 'userName'], (result) => {
-              if (result.userId) {
+            chrome.storage.local.get(['userId', 'userEmail', 'userName', 'isAuthenticated'], (result) => {
+              if (result.userId && result.isAuthenticated === true) {
                 setUserAuth({
                   userId: result.userId,
                   email: result.userEmail || '',
                   name: result.userName || '',
                 });
+                setIsAuthenticated(true);
+              } else {
+                setUserAuth(null);
+                setIsAuthenticated(false);
               }
             });
           }
@@ -1721,7 +1743,7 @@ const SidePanel = () => {
             )}
           </div>
           <div className="header-icons">
-            {userAuth && (
+            {isAuthenticated && userAuth && (
               <div className="relative group">
                 <button
                   type="button"
