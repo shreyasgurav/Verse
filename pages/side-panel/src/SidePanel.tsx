@@ -15,8 +15,6 @@ import {
   AgentNameEnum,
   getDefaultAgentModelParams,
   type ChatHistoryStorage,
-  userCreditsStore,
-  type UserCredits,
 } from '@extension/storage';
 import favoritesStorage, { type FavoritePrompt } from '@extension/storage/lib/prompt/favorites';
 import { t } from '@extension/i18n';
@@ -131,7 +129,14 @@ const SidePanel = () => {
   const [currentTabMeta, setCurrentTabMeta] = useState<{ title: string; icon?: string; url?: string } | null>(null);
   const [userAuth, setUserAuth] = useState<{ userId: string; email: string; name: string } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [userCredits, setUserCredits] = useState<UserCredits | null>(null);
+  const [userCredits, setUserCredits] = useState<{
+    userId: string;
+    totalCreditsUSD: number;
+    usedCreditsUSD: number;
+    remainingCreditsUSD: number;
+    lastUpdated: number;
+    createdAt: number;
+  } | null>(null);
 
   // Tab-specific state
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
@@ -714,13 +719,17 @@ const SidePanel = () => {
 
     const loadUserCredits = async (userId: string) => {
       try {
-        let credits = await userCreditsStore.getUserCredits(userId);
-        if (!credits) {
-          // Initialize credits for new user
-          credits = await userCreditsStore.initializeUser(userId);
-          console.log('[Credits] Initialized credits for user:', userId, credits);
+        // Load from chrome.storage.local (cached from Firestore by background script)
+        const result = await chrome.storage.local.get([`user_credits_${userId}`]);
+        const credits = result[`user_credits_${userId}`];
+
+        if (credits) {
+          setUserCredits(credits);
+          console.log('[Credits] Loaded credits from storage:', credits);
+        } else {
+          console.log('[Credits] No credits found in storage for user:', userId);
+          // Credits will be initialized by background script on first API call
         }
-        setUserCredits(credits);
       } catch (error) {
         console.error('[Credits] Error loading user credits:', error);
       }
@@ -764,10 +773,16 @@ const SidePanel = () => {
     // Listen for storage changes (when auth happens in another tab)
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
       if (areaName === 'local') {
-        // Check for credit updates
-        if (changes['user-credits'] && userAuth?.userId) {
-          console.log('[Credits] Storage change detected, reloading credits');
-          loadUserCredits(userAuth.userId);
+        // Check for credit updates (key format: user_credits_${userId})
+        if (userAuth?.userId) {
+          const creditKey = `user_credits_${userAuth.userId}`;
+          if (changes[creditKey]) {
+            console.log('[Credits] Storage change detected, updating credits');
+            const newCredits = changes[creditKey].newValue;
+            if (newCredits) {
+              setUserCredits(newCredits);
+            }
+          }
         }
 
         // Check for auth-related changes

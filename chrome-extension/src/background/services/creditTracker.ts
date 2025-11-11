@@ -1,5 +1,11 @@
-import { userCreditsStore, type UserCredits } from '@extension/storage';
 import { createLogger } from '../log';
+import {
+  getUserCredits as getFirestoreCredits,
+  addUsage as addFirestoreUsage,
+  hasCredits as checkFirestoreCredits,
+  initializeUserCredits as initFirestoreCredits,
+  type UserCredits,
+} from './firestoreCredits';
 
 const logger = createLogger('CreditTracker');
 
@@ -78,7 +84,7 @@ export function calculateCost(modelName: string, inputTokens: number, outputToke
 }
 
 /**
- * Track usage for an authenticated user
+ * Track usage for an authenticated user (Firestore)
  * @param userId - User ID from authentication
  * @param modelName - Model name used
  * @param inputTokens - Input tokens
@@ -101,42 +107,50 @@ export async function trackUsage(
     cost: cost.toFixed(6),
   });
 
-  // Update user credits
-  const updatedCredits = await userCreditsStore.addUsage(userId, cost);
+  // Update user credits in Firestore
+  const updatedCredits = await addFirestoreUsage(userId, cost);
 
-  logger.info('[CreditTracker] Updated credits:', {
+  logger.info('[CreditTracker] Updated credits in Firestore:', {
     userId,
     used: updatedCredits.usedCreditsUSD.toFixed(4),
     remaining: updatedCredits.remainingCreditsUSD.toFixed(4),
     total: updatedCredits.totalCreditsUSD.toFixed(2),
   });
 
+  // Also update chrome.storage.local for UI display
+  await chrome.storage.local.set({ [`user_credits_${userId}`]: updatedCredits });
+
   return updatedCredits;
 }
 
 /**
- * Check if a user has remaining credits before making an API call
+ * Check if a user has remaining credits before making an API call (Firestore)
  * @param userId - User ID
  * @returns true if user has credits, false otherwise
  */
 export async function checkUserHasCredits(userId: string): Promise<boolean> {
-  return await userCreditsStore.hasCredits(userId);
+  return await checkFirestoreCredits(userId);
 }
 
 /**
- * Get user credits
+ * Get user credits (Firestore)
  * @param userId - User ID
  * @returns User credits or null if not found
  */
 export async function getUserCredits(userId: string): Promise<UserCredits | null> {
-  return await userCreditsStore.getUserCredits(userId);
+  return await getFirestoreCredits(userId);
 }
 
 /**
- * Initialize credits for a new user
+ * Initialize credits for a new user (Firestore)
  * @param userId - User ID
  * @returns User credits
  */
 export async function initializeUserCredits(userId: string): Promise<UserCredits> {
-  return await userCreditsStore.initializeUser(userId);
+  const credits = await initFirestoreCredits(userId);
+
+  // Also save to chrome.storage.local for UI display
+  await chrome.storage.local.set({ [`user_credits_${userId}`]: credits });
+
+  return credits;
 }
