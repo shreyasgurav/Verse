@@ -1721,24 +1721,26 @@ const SidePanel = () => {
             )}
           </div>
           <div className="header-icons">
-            <div className="relative group">
-            <button
-              type="button"
-              onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  handleSendMessage('/summarize_page', 'Summarize page');
-                }
-              }}
-              className={`header-icon text-white hover:text-white cursor-pointer`}
-              aria-label={'Summarize page'}
-              tabIndex={0}>
-              <span className="material-symbols-outlined" style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
-                segment
-              </span>
-            </button>
-            <span className="instant-tooltip">Summarize page</span>
-            </div>
+            {userAuth && (
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      handleSendMessage('/summarize_page', 'Summarize page');
+                    }
+                  }}
+                  className={`header-icon text-white hover:text-white cursor-pointer`}
+                  aria-label={'Summarize page'}
+                  tabIndex={0}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
+                    segment
+                  </span>
+                </button>
+                <span className="instant-tooltip">Summarize page</span>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => chrome.runtime.openOptionsPage()}
