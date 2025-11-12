@@ -129,14 +129,6 @@ const SidePanel = () => {
   const [currentTabMeta, setCurrentTabMeta] = useState<{ title: string; icon?: string; url?: string } | null>(null);
   const [userAuth, setUserAuth] = useState<{ userId: string; email: string; name: string } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [userCredits, setUserCredits] = useState<{
-    userId: string;
-    totalCreditsUSD: number;
-    usedCreditsUSD: number;
-    remainingCreditsUSD: number;
-    lastUpdated: number;
-    createdAt: number;
-  } | null>(null);
 
   // Tab-specific state
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
@@ -687,7 +679,6 @@ const SidePanel = () => {
   // Load user auth from storage and handle auth callbacks
   useEffect(() => {
     let authCheckInterval: NodeJS.Timeout | null = null;
-    let creditsCheckInterval: NodeJS.Timeout | null = null;
 
     const loadUserAuth = async () => {
       try {
@@ -700,38 +691,15 @@ const SidePanel = () => {
             name: result.userName || '',
           });
           setIsAuthenticated(true);
-
-          // Load or initialize user credits
-          await loadUserCredits(result.userId);
         } else {
           // Clear auth state if not authenticated
           setUserAuth(null);
           setIsAuthenticated(false);
-          setUserCredits(null);
         }
       } catch (error) {
         console.error('Error loading user auth:', error);
         setUserAuth(null);
         setIsAuthenticated(false);
-        setUserCredits(null);
-      }
-    };
-
-    const loadUserCredits = async (userId: string) => {
-      try {
-        // Load from chrome.storage.local (cached from Firestore by background script)
-        const result = await chrome.storage.local.get([`user_credits_${userId}`]);
-        const credits = result[`user_credits_${userId}`];
-
-        if (credits) {
-          setUserCredits(credits);
-          console.log('[Credits] Loaded credits from storage:', credits);
-        } else {
-          console.log('[Credits] No credits found in storage for user:', userId);
-          // Credits will be initialized by background script on first API call
-        }
-      } catch (error) {
-        console.error('[Credits] Error loading user credits:', error);
       }
     };
 
@@ -754,7 +722,6 @@ const SidePanel = () => {
             });
             setUserAuth(null);
             setIsAuthenticated(false);
-            setUserCredits(null);
             // Trigger model configuration check to show sign-in page
             checkModelConfiguration();
           }
@@ -773,18 +740,6 @@ const SidePanel = () => {
     // Listen for storage changes (when auth happens in another tab)
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
       if (areaName === 'local') {
-        // Check for credit updates (key format: user_credits_${userId})
-        if (userAuth?.userId) {
-          const creditKey = `user_credits_${userAuth.userId}`;
-          if (changes[creditKey]) {
-            console.log('[Credits] Storage change detected, updating credits');
-            const newCredits = changes[creditKey].newValue;
-            if (newCredits) {
-              setUserCredits(newCredits);
-            }
-          }
-        }
-
         // Check for auth-related changes
         if (changes.userId || changes.userEmail || changes.userName || changes.isAuthenticated) {
           // If isAuthenticated was removed or set to false, clear auth state immediately
@@ -797,7 +752,6 @@ const SidePanel = () => {
             );
             setUserAuth(null);
             setIsAuthenticated(false);
-            setUserCredits(null);
             // Trigger model configuration check to show sign-in page
             checkModelConfiguration();
           } else if (changes.isAuthenticated?.newValue === true) {
@@ -821,13 +775,6 @@ const SidePanel = () => {
     const pollInterval = setInterval(() => {
       loadUserAuth();
     }, 1000); // Check every second
-
-    // Poll for credit updates every 2 seconds when authenticated (for immediate updates)
-    creditsCheckInterval = setInterval(async () => {
-      if (isAuthenticated && userAuth?.userId) {
-        await loadUserCredits(userAuth.userId);
-      }
-    }, 2000);
 
     // SECURITY: Continuously verify authentication status every 2 seconds
     authCheckInterval = setInterval(() => {
@@ -1859,22 +1806,6 @@ const SidePanel = () => {
                 aria-label={t('nav_back_a11y')}>
                 {t('nav_back')}
               </button>
-            )}
-            {!showHistory && isAuthenticated && (
-              <div
-                className="text-white text-sm font-medium"
-                style={{ marginLeft: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {userCredits ? (
-                  <>
-                    <span style={{ opacity: 0.7 }}>💳</span>
-                    <span>
-                      ${userCredits.remainingCreditsUSD.toFixed(2)} / ${userCredits.totalCreditsUSD.toFixed(2)}
-                    </span>
-                  </>
-                ) : (
-                  <span style={{ opacity: 0.6, fontSize: '11px' }}>Loading credits...</span>
-                )}
-              </div>
             )}
           </div>
           <div className="header-icons">

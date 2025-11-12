@@ -19,18 +19,8 @@ import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
 import { summarizePage, cleanupAfterSummarize } from './services/summarize';
-import { initializeFirebase } from './services/firebase';
-import { initializeUserCredits, getUserCredits } from './services/creditTracker';
 
 const logger = createLogger('background');
-
-// Initialize Firebase on extension load
-try {
-  initializeFirebase();
-  logger.info('[Firebase] Initialized on extension load');
-} catch (error) {
-  logger.error('[Firebase] Failed to initialize:', error);
-}
 
 // Tab-specific browser contexts, executors and ports for multi-instance support
 const tabBrowserContexts = new Map<number, BrowserContext>();
@@ -1011,37 +1001,6 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
       },
       async () => {
         logger.info('[background] Auth data stored:', { userId, email, name });
-
-        // Initialize user credits in Firestore
-        try {
-          logger.info('[Credits] Starting credit initialization for user:', userId);
-          logger.info('[Credits] Firebase initialized:', !!initializeFirebase);
-
-          const credits = await initializeUserCredits(userId);
-
-          logger.info('[Credits] ✅ Credits successfully initialized!', {
-            userId,
-            total: credits.totalCreditsUSD,
-            used: credits.usedCreditsUSD,
-            remaining: credits.remainingCreditsUSD,
-          });
-
-          // Verify by reading back from Firestore
-          const verifyCredits = await getUserCredits(userId);
-          if (verifyCredits) {
-            logger.info('[Credits] ✅ Verified credits in Firestore:', verifyCredits);
-          } else {
-            logger.warning('[Credits] ⚠️ Credits initialized but could not verify');
-          }
-        } catch (error: any) {
-          logger.error('[Credits] ❌ Failed to initialize user credits:', {
-            error: error.message,
-            code: error.code,
-            stack: error.stack,
-            userId,
-          });
-          console.error('[Credits] Full error:', error);
-        }
 
         // Open side panel if requested
         if (shouldOpenSidePanel) {
