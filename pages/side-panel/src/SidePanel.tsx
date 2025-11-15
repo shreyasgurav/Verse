@@ -818,7 +818,7 @@ const SidePanel = () => {
   const handleGoogleSignIn = () => {
     const authWebsiteUrl = import.meta.env.VITE_AUTH_WEBSITE_URL || 'https://www.useverseai.com';
     const extensionId = chrome.runtime.id;
-    const authUrl = `${authWebsiteUrl}?extensionId=${extensionId}`;
+    const authUrl = `${authWebsiteUrl}/signin?extensionId=${extensionId}`;
 
     // Open auth website in a new tab
     chrome.tabs.create({ url: authUrl }, tab => {
