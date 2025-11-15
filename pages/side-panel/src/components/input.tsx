@@ -1,5 +1,6 @@
 import React from 'react';
 import ChatInput from './ChatInput';
+import { getFeatureButton } from '../features';
 
 interface TabMeta {
   title: string;
@@ -20,6 +21,7 @@ interface InputProps {
   currentSessionId: string | null;
   replayEnabled: boolean;
   onReplay: (historicalSessionId: string) => void;
+  currentTabId?: number | null;
 }
 
 export default function InputSection({
@@ -35,23 +37,34 @@ export default function InputSection({
   currentSessionId,
   replayEnabled,
   onReplay,
+  currentTabId,
 }: InputProps) {
   const shouldShowTabChip =
     !!currentTabMeta?.url &&
     !['about:blank', 'chrome://new-tab-page', 'chrome://new-tab-page/'].includes(currentTabMeta.url);
 
+  // Get feature button component if available
+  const FeatureButton = currentTabMeta?.url ? getFeatureButton(currentTabMeta.url) : null;
+
   return (
     <>
       {shouldShowTabChip && (
         <div className="tab-chip">
-          {currentTabMeta?.icon && (
-            <img
-              src={currentTabMeta.icon}
-              alt=""
-              style={{ width: 16, height: 16, borderRadius: 3, marginRight: 8 }}
-            />
-          )}
-          <span className="tab-chip-title">{currentTabMeta?.title || 'This page'}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              {currentTabMeta?.icon && (
+                <img
+                  src={currentTabMeta.icon}
+                  alt=""
+                  style={{ width: 16, height: 16, borderRadius: 3, marginRight: 8 }}
+                />
+              )}
+              <span className="tab-chip-title">{currentTabMeta?.title || 'This page'}</span>
+            </div>
+            {FeatureButton && currentTabId && currentTabMeta && (
+              <FeatureButton tabId={currentTabId} tabMeta={currentTabMeta} isDarkMode={isDarkMode} />
+            )}
+          </div>
         </div>
       )}
 

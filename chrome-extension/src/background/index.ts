@@ -19,6 +19,7 @@ import { SpeechToTextService } from './services/speechToText';
 import { injectBuildDomTreeScripts } from './browser/dom/service';
 import { analytics } from './services/analytics';
 import { summarizePage, cleanupAfterSummarize } from './services/summarize';
+import { registerAllFeatureHandlers } from './features';
 
 const logger = createLogger('background');
 
@@ -1067,3 +1068,6 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 
   return false; // Return false for other message types
 });
+
+// Register all website-specific feature handlers
+registerAllFeatureHandlers();

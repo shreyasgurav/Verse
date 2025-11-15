@@ -13,12 +13,11 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
 
   useEffect(() => {
     // Get extension ID from storage (try localStorage first, then sessionStorage) or redirect URL
-    let extensionId = localStorage.getItem('verse_extension_id') || 
-                     sessionStorage.getItem('verse_extension_id');
+    let extensionId = localStorage.getItem('verse_extension_id') || sessionStorage.getItem('verse_extension_id');
     if (!extensionId && redirectUrl && redirectUrl.startsWith('chrome-extension://')) {
       extensionId = redirectUrl.split('://')[1]?.split('/')[0] || null;
     }
-    
+
     // Send auth data to extension and request to open side panel
     if (extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
       try {
@@ -37,7 +36,7 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
               console.log('Message sent to extension:', response);
               setMessage('Opening Verse side panel...');
             }
-          }
+          },
         );
       } catch (error) {
         console.error('Error sending message to extension:', error);
@@ -54,7 +53,7 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
 
     // Countdown timer to close the tab
     const timer = setInterval(() => {
-      setCountdown((prev) => {
+      setCountdown(prev => {
         if (prev <= 1) {
           clearInterval(timer);
           // Close the tab after countdown
@@ -77,63 +76,72 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
   }, [authData, redirectUrl]);
 
   return (
-    <div style={{
-      width: '100%',
-      minHeight: '100vh',
-      background: '#ffffff',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '24px'
-    }}>
-      <div style={{
-        background: '#ffffff',
-        borderRadius: '24px',
-        padding: '64px',
-        border: '1px solid rgba(0, 0, 0, 0.06)',
-        maxWidth: '500px',
+    <div
+      style={{
         width: '100%',
-        textAlign: 'center',
+        minHeight: '100vh',
+        background: '#ffffff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
       }}>
-        <div style={{ 
-          fontSize: '64px', 
-          marginBottom: '24px',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text'
-        }}>✓</div>
-        <h1 style={{ 
-          fontSize: '32px', 
-          fontWeight: '700', 
-          color: '#000',
-          marginBottom: '16px',
-          letterSpacing: '-0.02em'
+      <div
+        style={{
+          background: '#ffffff',
+          borderRadius: '24px',
+          padding: '64px',
+          border: '1px solid rgba(0, 0, 0, 0.06)',
+          maxWidth: '500px',
+          width: '100%',
+          textAlign: 'center',
         }}>
+        <div
+          style={{
+            fontSize: '64px',
+            marginBottom: '24px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}>
+          ✓
+        </div>
+        <h1
+          style={{
+            fontSize: '32px',
+            fontWeight: '700',
+            color: '#000',
+            marginBottom: '16px',
+            letterSpacing: '-0.02em',
+          }}>
           Sign In Successful!
         </h1>
-        <p style={{ 
-          fontSize: '18px', 
-          color: '#666',
-          marginBottom: '32px'
-        }}>
+        <p
+          style={{
+            fontSize: '18px',
+            color: '#666',
+            marginBottom: '32px',
+          }}>
           Welcome, {authData.name}
         </p>
         {message && (
-          <p style={{ 
-            fontSize: '16px', 
-            color: '#667eea',
-            marginBottom: '24px',
-            fontWeight: '500'
-          }}>
+          <p
+            style={{
+              fontSize: '16px',
+              color: '#667eea',
+              marginBottom: '24px',
+              fontWeight: '500',
+            }}>
             {message}
           </p>
         )}
         {countdown > 0 && !showSignOut && (
-          <p style={{ 
-            fontSize: '14px', 
-            color: '#999'
-          }}>
+          <p
+            style={{
+              fontSize: '14px',
+              color: '#999',
+            }}>
             Closing in {countdown}...
           </p>
         )}
@@ -152,15 +160,14 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
               cursor: 'pointer',
               transition: 'all 0.2s',
             }}
-            onMouseOver={(e) => {
+            onMouseOver={e => {
               e.currentTarget.style.background = 'rgba(0, 0, 0, 0.02)';
               e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.4)';
             }}
-            onMouseOut={(e) => {
+            onMouseOut={e => {
               e.currentTarget.style.background = 'transparent';
               e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
-            }}
-          >
+            }}>
             Sign Out
           </button>
         )}
@@ -168,4 +175,3 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
     </div>
   );
 }
-

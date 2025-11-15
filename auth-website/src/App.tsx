@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './firebase';
 import LandingPage from './components/LandingPage';
-import SignInPage from './components/SignInPage';
 import './components/LandingPage.css';
 
 function App() {
@@ -188,16 +186,14 @@ function App() {
     }
   };
 
+  // Always show landing page - button changes based on auth state
   return (
-    <Router>
-      <Routes>
-        <Route
-          path="/"
-          element={<LandingPage isAuthenticated={!!authData} userName={authData?.name} onSignOut={handleSignOut} />}
-        />
-        <Route path="/signin" element={<SignInPage onSignIn={handleGoogleSignIn} />} />
-      </Routes>
-    </Router>
+    <LandingPage
+      onSignIn={handleGoogleSignIn}
+      isAuthenticated={!!authData}
+      userName={authData?.name}
+      onSignOut={handleSignOut}
+    />
   );
 }
 

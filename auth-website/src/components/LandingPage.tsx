@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 interface LandingPageProps {
+  onSignIn: () => void;
   isAuthenticated: boolean;
   userName?: string;
   onSignOut?: () => void;
 }
 
-export default function LandingPage({ isAuthenticated, onSignOut }: LandingPageProps) {
-  const navigate = useNavigate();
+export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: LandingPageProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const heroTitleRef = useRef<HTMLDivElement>(null);
@@ -145,7 +144,7 @@ export default function LandingPage({ isAuthenticated, onSignOut }: LandingPageP
                   Sign Out
                 </button>
               ) : (
-                <button onClick={() => navigate('/signin')} className="btn-signin">
+                <button onClick={onSignIn} className="btn-signin">
                   Sign In
                 </button>
               )}
@@ -177,7 +176,7 @@ export default function LandingPage({ isAuthenticated, onSignOut }: LandingPageP
                 className="btn-download">
                 Download for Chrome
               </a>
-              <button onClick={() => navigate('/signin')} className="btn-signin-google">
+              <button onClick={onSignIn} className="btn-signin-google">
                 Sign in with Google
               </button>
             </div>
