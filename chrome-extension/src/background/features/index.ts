@@ -5,10 +5,11 @@
 
 import type { FeatureMessageHandler } from './types';
 import { googleFormsHandlers } from './google-forms';
+import { universalFormsHandlers } from './universal-forms';
 
 const allHandlers: FeatureMessageHandler[] = [
-  ...googleFormsHandlers,
-  // Add more feature handlers here
+  ...googleFormsHandlers, // Google Forms specific (higher priority)
+  ...universalFormsHandlers, // Universal form filler (fallback)
 ];
 
 export function registerAllFeatureHandlers() {

@@ -5,10 +5,11 @@
 
 import type { WebsiteFeature } from './shared/types';
 import { googleFormsFeature } from './google-forms';
+import { universalFormsFeature } from './universal-forms';
 
 const features: WebsiteFeature[] = [
-  googleFormsFeature,
-  // Add more features here
+  googleFormsFeature, // Google Forms (specific implementation)
+  universalFormsFeature, // Universal form filler (works on all sites)
 ];
 
 export function initializeFeatures() {
