@@ -389,6 +389,9 @@ importers:
       '@extension/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      firebase:
+        specifier: ^12.5.0
+        version: 12.5.0
       lucide-react:
         specifier: ^0.546.0
         version: 0.546.0(react@18.3.1)

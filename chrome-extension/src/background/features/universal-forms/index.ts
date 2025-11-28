@@ -2,10 +2,11 @@
  * Universal Forms Background Feature Handlers
  */
 
-import { agentModelStore, AgentNameEnum, llmProviderStore } from '@extension/storage';
+import { agentModelStore, AgentNameEnum, llmProviderStore, ProviderTypeEnum } from '@extension/storage';
 import { createChatModel } from '../../agent/helper';
 import { createLogger } from '../../log';
 import type { FeatureMessageHandler } from '../types';
+import { retrieveRelevantMemories, formatMemoriesForPrompt } from '../../services/memoryRetrieval';
 
 const logger = createLogger('universal-forms');
 
@@ -73,8 +74,22 @@ async function handleFillUniversalFormField(message: any, sendResponse: (respons
     // Create a chat model
     const chatModel = createChatModel(providerConfig, navigatorModel);
 
+    // Retrieve relevant memories for this field
+    const openAIKey = providerConfig.type === ProviderTypeEnum.OpenAI ? providerConfig.apiKey : undefined;
+    const relevantMemories = await retrieveRelevantMemories(field.context, openAIKey, 3, 0.5);
+    const memoryContext = formatMemoriesForPrompt(relevantMemories);
+
+    if (relevantMemories.length > 0) {
+      logger.info(`Found ${relevantMemories.length} relevant memories for field:`, field.context);
+    }
+
     // Build context-rich prompt
-    let prompt = `You are filling out a form field. Provide an appropriate answer.\n\n`;
+    let prompt = '';
+    if (memoryContext) {
+      prompt = `${memoryContext}You are filling out a form field. Use the information from your memories above if relevant. Provide an appropriate answer.\n\n`;
+    } else {
+      prompt = `You are filling out a form field. Provide an appropriate answer.\n\n`;
+    }
     prompt += `Field Context: ${field.context}\n`;
     prompt += `Field Type: ${field.type}\n`;
 

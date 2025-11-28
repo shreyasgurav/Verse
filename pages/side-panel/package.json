@@ -22,6 +22,7 @@
     "@extension/i18n": "workspace:*",
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
+    "firebase": "^12.5.0",
     "lucide-react": "^0.546.0",
     "react-icons": "^5.0.0",
     "webextension-polyfill": "^0.12.0",

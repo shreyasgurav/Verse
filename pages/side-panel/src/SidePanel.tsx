@@ -24,6 +24,21 @@ import ChatHistoryList from './components/ChatHistoryList';
 import BookmarkList from './components/BookmarkList';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import './SidePanel.css';
+import { saveUserMemory } from './services/memoryStore';
+import { ensureFirebaseUser, signOutFirebaseUser } from './services/firebase';
+import {
+  extractMemoriesFromPrompt,
+  type ExtractedMemory,
+  findSimilarMemory,
+  mergeMemories,
+} from './services/memoryExtractor';
+import {
+  type MemoryWithEmbedding,
+  generateMemoryEmbeddings,
+  findRelevantMemories,
+  formatMemoriesAsContext,
+} from './services/embeddingService';
+import { Clock, Trash2 } from 'lucide-react';
 
 // Declare chrome API types
 declare global {
@@ -99,6 +114,13 @@ const getDefaultProviderConfig = (providerId: string): ProviderConfig => {
   };
 };
 
+type UserAuthState = {
+  userId: string;
+  email: string;
+  name: string;
+  idToken?: string;
+};
+
 const SidePanel = () => {
   const progressMessage = 'Showing progress...';
   const [messages, setMessages] = useState<Message[]>([]);
@@ -127,7 +149,7 @@ const SidePanel = () => {
   const setInputTextRef = useRef<((text: string) => void) | null>(null);
   const taskTimeoutRef = useRef<number | null>(null);
   const [currentTabMeta, setCurrentTabMeta] = useState<{ title: string; icon?: string; url?: string } | null>(null);
-  const [userAuth, setUserAuth] = useState<{ userId: string; email: string; name: string } | null>(null);
+  const [userAuth, setUserAuth] = useState<UserAuthState | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
   // Tab-specific state
@@ -150,6 +172,125 @@ const SidePanel = () => {
   const [singleModel, setSingleModel] = useState<string>('');
   const [singleApiKey, setSingleApiKey] = useState<string>('');
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({});
+
+  // Local memory state
+  const [showMemories, setShowMemories] = useState(false);
+  const [memories, setMemories] = useState<MemoryWithEmbedding[]>([]);
+  const [embeddingApiKey, setEmbeddingApiKey] = useState<string>('');
+
+  const loadLocalMemories = useCallback(async () => {
+    try {
+      const res = await chrome.storage.local.get(['verse_memories']);
+      const items: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
+      // Newest first
+      setMemories(items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
+    } catch (e) {
+      console.error('Failed to load local memories', e);
+      setMemories([]);
+    }
+  }, []);
+
+  const deleteLocalMemory = useCallback(async (timestamp: number) => {
+    try {
+      const res = await chrome.storage.local.get(['verse_memories']);
+      const items: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
+      const next = items.filter(item => item.timestamp !== timestamp);
+      await chrome.storage.local.set({ verse_memories: next });
+      setMemories(prev => prev.filter(item => item.timestamp !== timestamp));
+    } catch (e) {
+      console.error('Failed to delete local memory', e);
+    }
+  }, []);
+
+  const savePromptToLocal = useCallback(
+    async (content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed) return;
+
+      try {
+        // Load existing memories
+        const res = await chrome.storage.local.get(['verse_memories']);
+        const existingMemories: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
+
+        // Extract important information from the prompt
+        const extractionResult = await extractMemoriesFromPrompt(trimmed, existingMemories);
+
+        if (!extractionResult.shouldSave) {
+          console.log('Memory extraction: No important information to save -', extractionResult.reasoning);
+          return;
+        }
+
+        console.log(`Memory extraction: Found ${extractionResult.memories.length} important memories`);
+
+        // Process each extracted memory
+        let updatedMemories = [...existingMemories];
+        let addedCount = 0;
+        let updatedCount = 0;
+
+        for (const newMemory of extractionResult.memories) {
+          // Check if similar memory exists
+          const similarMemory = findSimilarMemory(newMemory, updatedMemories, 0.7);
+
+          if (similarMemory) {
+            // Update existing memory
+            const mergedMemory = mergeMemories(similarMemory, newMemory);
+            updatedMemories = updatedMemories.map(m => (m.timestamp === similarMemory.timestamp ? mergedMemory : m));
+            updatedCount++;
+            console.log('Memory updated:', mergedMemory.category, '-', mergedMemory.content.substring(0, 50));
+          } else {
+            // Add new memory
+            updatedMemories.unshift(newMemory);
+            addedCount++;
+            console.log('Memory added:', newMemory.category, '-', newMemory.content.substring(0, 50));
+          }
+        }
+
+        // Limit to 200 most recent memories
+        const MAX = 200;
+        if (updatedMemories.length > MAX) {
+          updatedMemories = updatedMemories.slice(0, MAX);
+        }
+
+        // Get API key for embeddings
+        let apiKey = embeddingApiKey;
+        if (!apiKey) {
+          // Try to get from providers if not set yet
+          const allProviders = await llmProviderStore.getAllProviders();
+          const openAIProvider = Object.values(allProviders).find(p => p.type === ProviderTypeEnum.OpenAI);
+          if (openAIProvider?.apiKey) {
+            apiKey = openAIProvider.apiKey;
+            console.log('🔑 Using OpenAI API key from providers for embeddings');
+          }
+        }
+
+        // Generate embeddings for new memories
+        const memoriesWithEmbeddings = await generateMemoryEmbeddings(updatedMemories, apiKey);
+
+        // Save to storage
+        await chrome.storage.local.set({ verse_memories: memoriesWithEmbeddings });
+        console.log(`✅ Memory save complete: ${addedCount} added, ${updatedCount} updated, embeddings generated`);
+      } catch (e) {
+        console.error('Failed to save local memory', e);
+      }
+    },
+    [embeddingApiKey],
+  );
+
+  const persistMemoryEntry = useCallback(
+    async (text: string) => {
+      if (!isAuthenticated || !userAuth?.userId || !userAuth?.idToken || !text.trim()) {
+        return;
+      }
+
+      try {
+        await ensureFirebaseUser(userAuth.idToken, userAuth.userId);
+        await saveUserMemory(userAuth.userId, text);
+      } catch (error) {
+        console.error('Failed to save memory entry:', error);
+      }
+    },
+    [isAuthenticated, userAuth],
+  );
 
   // Function to initialize tab context (extracted for reuse)
   const initializeTabContext = useCallback(async (forceTabId?: number) => {
@@ -483,6 +624,12 @@ const SidePanel = () => {
             ? cfg.modelNames
             : llmProviderModelNames[pid as keyof typeof llmProviderModelNames] || [];
         setSingleModel(models[0] ? `${pid}>${models[0]}` : '');
+
+        // Use OpenAI API key for embeddings if available
+        if (pid === ProviderTypeEnum.OpenAI && cfg.apiKey) {
+          setEmbeddingApiKey(cfg.apiKey);
+          console.log('🔑 Using OpenAI API key for memory embeddings');
+        }
       }
     } catch (error) {
       console.error('Error loading providers:', error);
@@ -682,13 +829,20 @@ const SidePanel = () => {
 
     const loadUserAuth = async () => {
       try {
-        const result = await chrome.storage.local.get(['userId', 'userEmail', 'userName', 'isAuthenticated']);
+        const result = await chrome.storage.local.get([
+          'userId',
+          'userEmail',
+          'userName',
+          'userIdToken',
+          'isAuthenticated',
+        ]);
         // Only set auth if user is authenticated
         if (result.userId && result.isAuthenticated === true) {
           setUserAuth({
             userId: result.userId,
             email: result.userEmail || '',
             name: result.userName || '',
+            idToken: typeof result.userIdToken === 'string' ? result.userIdToken : undefined,
           });
           setIsAuthenticated(true);
         } else {
@@ -741,7 +895,7 @@ const SidePanel = () => {
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
       if (areaName === 'local') {
         // Check for auth-related changes
-        if (changes.userId || changes.userEmail || changes.userName || changes.isAuthenticated) {
+        if (changes.userId || changes.userEmail || changes.userName || changes.userIdToken || changes.isAuthenticated) {
           // If isAuthenticated was removed or set to false, clear auth state immediately
           if (
             changes.isAuthenticated?.newValue === false ||
@@ -786,11 +940,17 @@ const SidePanel = () => {
     // Listen for messages from background script
     const handleRuntimeMessage = (message: any) => {
       if (message.type === 'VERSE_AUTH_SUCCESS' && message.data) {
-        const { userId, email, name } = message.data;
-        const authData = { userId, email, name };
+        const { userId, email, name, idToken } = message.data;
+        const authData: UserAuthState = { userId, email, name, idToken };
         setUserAuth(authData);
         setIsAuthenticated(true);
-        chrome.storage.local.set({ userId, userEmail: email, userName: name, isAuthenticated: true });
+        chrome.storage.local.set({
+          userId,
+          userEmail: email,
+          userName: name,
+          userIdToken: idToken,
+          isAuthenticated: true,
+        });
         // Reload model configuration check
         checkModelConfiguration();
       } else if (message.type === 'VERSE_AUTH_SIGNOUT') {
@@ -814,6 +974,26 @@ const SidePanel = () => {
       chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
     };
   }, [checkModelConfiguration, userAuth]);
+
+  useEffect(() => {
+    const syncFirebaseAuth = async () => {
+      if (isAuthenticated && userAuth?.idToken) {
+        try {
+          await ensureFirebaseUser(userAuth.idToken, userAuth.userId);
+        } catch (error) {
+          console.error('Failed to authenticate with Firebase:', error);
+        }
+      } else {
+        try {
+          await signOutFirebaseUser();
+        } catch (error) {
+          console.error('Failed to sign out from Firebase:', error);
+        }
+      }
+    };
+
+    syncFirebaseAuth();
+  }, [isAuthenticated, userAuth?.idToken, userAuth?.userId]);
 
   const handleGoogleSignIn = () => {
     const authWebsiteUrl = import.meta.env.VITE_AUTH_WEBSITE_URL || 'https://www.useverseai.com';
@@ -1293,13 +1473,37 @@ const SidePanel = () => {
         setupConnection();
       }
 
-      // Send replay command to background with the task from history
+      // Retrieve relevant memories for context
+      let promptWithContext = `/replay ${historySessionId}`;
+      try {
+        const res = await chrome.storage.local.get(['verse_memories']);
+        const existingMemories: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
+
+        if (existingMemories.length > 0) {
+          const relevantMemories = await findRelevantMemories(
+            `/replay ${historySessionId}`,
+            existingMemories,
+            embeddingApiKey,
+            5, // Top 5 most relevant
+            0.5, // 50% minimum similarity
+          );
+
+          if (relevantMemories.length > 0) {
+            const memoryContext = formatMemoriesAsContext(relevantMemories);
+            promptWithContext = `${memoryContext}\n/replay ${historySessionId}`;
+            console.log(`🧠 Injected ${relevantMemories.length} relevant memories into prompt context`);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to retrieve relevant memories:', error);
+        // Continue without memory context
+      }
+
+      // Send replay command to background (with memory context if available)
       portRef.current?.postMessage({
         type: 'replay',
-        taskId: newTaskId,
-        tabId: tabId,
-        historySessionId: historySessionId,
         task: historyData.task, // Add the task from history
+        historySessionId: historySessionId,
       });
 
       appendMessage({
@@ -1456,6 +1660,55 @@ const SidePanel = () => {
       return;
     }
 
+    const memoryText = displayText || trimmedText;
+
+    // Save to local storage FIRST (so it's available for next prompt)
+    // Don't await - let it run in background
+    savePromptToLocal(memoryText).catch(err => console.error('Memory save error:', err));
+    // Also attempt to save to remote memory store if available
+    persistMemoryEntry(memoryText).catch(err => console.error('Remote memory save error:', err));
+
+    // Retrieve relevant memories for context
+    let promptWithContext = trimmedText;
+    try {
+      const res = await chrome.storage.local.get(['verse_memories']);
+      const existingMemories: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
+
+      if (existingMemories.length > 0) {
+        // Get API key for embeddings
+        let apiKey = embeddingApiKey;
+        if (!apiKey) {
+          // Try to get from providers if not set yet
+          const allProviders = await llmProviderStore.getAllProviders();
+          const openAIProvider = Object.values(allProviders).find(p => p.type === ProviderTypeEnum.OpenAI);
+          if (openAIProvider?.apiKey) {
+            apiKey = openAIProvider.apiKey;
+          }
+        }
+
+        const relevantMemories = await findRelevantMemories(
+          trimmedText,
+          existingMemories,
+          apiKey,
+          5, // Top 5 most relevant
+          0.5, // 50% minimum similarity
+        );
+
+        if (relevantMemories.length > 0) {
+          const memoryContext = formatMemoriesAsContext(relevantMemories);
+          promptWithContext = `${memoryContext}\n${trimmedText}`;
+          console.log(`🧠 Injected ${relevantMemories.length} relevant memories into prompt context`);
+        } else {
+          console.log('🧠 No relevant memories found for this prompt');
+        }
+      } else {
+        console.log('🧠 No memories saved yet');
+      }
+    } catch (error) {
+      console.error('Failed to retrieve relevant memories:', error);
+      // Continue without memory context
+    }
+
     try {
       // Use the stored tab ID (don't query active tab!)
       let tabId = tabIdRef.current;
@@ -1524,7 +1777,7 @@ const SidePanel = () => {
 
       const userMessage = {
         actor: Actors.USER,
-        content: displayText || text, // Use display text for chat UI, full text for background service
+        content: trimmedText, // Display original text to user
         timestamp: Date.now(),
       };
 
@@ -1536,26 +1789,26 @@ const SidePanel = () => {
         setupConnection();
       }
 
-      // Send message using the utility function
+      // Send message using the utility function (with memory context)
       const shouldFollowUp = isFollowUpMode && lastTaskSourceRef.current !== 'summarize';
       if (shouldFollowUp) {
         // Send as follow-up task
         await sendMessage({
           type: 'follow_up_task',
-          task: text,
+          task: promptWithContext, // Send with memory context
           taskId: sessionIdRef.current,
           tabId,
         });
-        console.log('follow_up_task sent', text, tabId, sessionIdRef.current);
+        console.log('follow_up_task sent with memory context', tabId, sessionIdRef.current);
       } else {
         // Send as new task
         await sendMessage({
           type: 'new_task',
-          task: text,
+          task: promptWithContext, // Send with memory context
           taskId: sessionIdRef.current,
           tabId,
         });
-        console.log('new_task sent', text, tabId, sessionIdRef.current);
+        console.log('new_task sent with memory context', tabId, sessionIdRef.current);
         lastTaskSourceRef.current = 'agent';
       }
     } catch (err) {
@@ -1809,6 +2062,33 @@ const SidePanel = () => {
             )}
           </div>
           <div className="header-icons">
+            {/* Memory toggle button */}
+            <div className="relative group">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMemories(prev => {
+                    const next = !prev;
+                    if (next) void loadLocalMemories();
+                    return next;
+                  });
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    setShowMemories(prev => {
+                      const next = !prev;
+                      if (next) void loadLocalMemories();
+                      return next;
+                    });
+                  }
+                }}
+                className={`header-icon text-white hover:text-white cursor-pointer`}
+                aria-label={'Memory'}
+                tabIndex={0}>
+                <Clock size={16} />
+              </button>
+              <span className="instant-tooltip">Memories</span>
+            </div>
             {isAuthenticated && userAuth && (
               <div className="relative group">
                 <button
@@ -1852,6 +2132,32 @@ const SidePanel = () => {
               visible={true}
               isDarkMode={isDarkMode}
             />
+          </div>
+        ) : showMemories ? (
+          <div className="flex-1 overflow-x-hidden overflow-y-auto p-3" style={{ backgroundColor: '#242424' }}>
+            {memories.length === 0 ? (
+              <div
+                className={`flex h-full items-center justify-center ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                No saved prompts yet
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {memories.map((m, idx) => (
+                  <div key={idx} className="p-3 rounded-md" style={{ backgroundColor: '#2b2b2b' }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-sm text-white whitespace-pre-wrap flex-1">{m.content}</div>
+                      <button
+                        className="text-red-300 hover:text-red-200 p-1 rounded flex-shrink-0"
+                        aria-label="Delete memory"
+                        title="Delete"
+                        onClick={() => deleteLocalMemory(m.timestamp)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <>

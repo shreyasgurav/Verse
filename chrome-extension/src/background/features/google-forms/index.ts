@@ -2,10 +2,11 @@
  * Google Forms Background Feature Handlers
  */
 
-import { agentModelStore, AgentNameEnum, llmProviderStore } from '@extension/storage';
+import { agentModelStore, AgentNameEnum, llmProviderStore, ProviderTypeEnum } from '@extension/storage';
 import { createChatModel } from '../../agent/helper';
 import { createLogger } from '../../log';
 import type { FeatureMessageHandler } from '../types';
+import { retrieveRelevantMemories, formatMemoriesForPrompt } from '../../services/memoryRetrieval';
 
 const logger = createLogger('google-forms');
 
@@ -80,6 +81,15 @@ async function handleFillFormQuestion(message: any, sendResponse: (response?: an
     // Create a chat model
     const chatModel = createChatModel(providerConfig, navigatorModel);
 
+    // Retrieve relevant memories for this question
+    const openAIKey = providerConfig.type === ProviderTypeEnum.OpenAI ? providerConfig.apiKey : undefined;
+    const relevantMemories = await retrieveRelevantMemories(question.question, openAIKey, 3, 0.5);
+    const memoryContext = formatMemoriesForPrompt(relevantMemories);
+
+    if (relevantMemories.length > 0) {
+      logger.info(`Found ${relevantMemories.length} relevant memories for question:`, question.question);
+    }
+
     // Format question with lettered options
     const optionsText =
       Array.isArray(question.options) && question.options.length > 0
@@ -89,9 +99,13 @@ async function handleFillFormQuestion(message: any, sendResponse: (response?: an
     // Build prompt based on question type
     let prompt = '';
     if (question.type === 'choice' && optionsText) {
-      prompt = `You are answering a multiple choice question. Return ONLY the letter (a, b, c, etc.) of the best answer.\n\nQuestion: ${question.question}\n\nOptions:\n${optionsText}\n\nAnswer with only the letter:`;
+      prompt = memoryContext
+        ? `${memoryContext}You are answering a multiple choice question. Use the information from your memories above if relevant. Return ONLY the letter (a, b, c, etc.) of the best answer.\n\nQuestion: ${question.question}\n\nOptions:\n${optionsText}\n\nAnswer with only the letter:`
+        : `You are answering a multiple choice question. Return ONLY the letter (a, b, c, etc.) of the best answer.\n\nQuestion: ${question.question}\n\nOptions:\n${optionsText}\n\nAnswer with only the letter:`;
     } else {
-      prompt = `You are filling out a form. Provide a short, appropriate answer to this question.\n\nQuestion: ${question.question}\n\nAnswer (be brief and direct):`;
+      prompt = memoryContext
+        ? `${memoryContext}You are filling out a form. Use the information from your memories above if relevant. Provide a short, appropriate answer to this question.\n\nQuestion: ${question.question}\n\nAnswer (be brief and direct):`
+        : `You are filling out a form. Provide a short, appropriate answer to this question.\n\nQuestion: ${question.question}\n\nAnswer (be brief and direct):`;
     }
 
     // Get answer from LLM

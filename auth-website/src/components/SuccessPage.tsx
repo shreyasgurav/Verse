@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 interface SuccessPageProps {
-  authData: { userId: string; email: string; name: string };
+  authData: { userId: string; email: string; name: string; idToken?: string };
   redirectUrl: string;
   onSignOut?: () => void;
 }

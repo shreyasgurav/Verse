@@ -989,7 +989,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
   logger.info('[background] External message received:', message.type, sender?.url);
 
   if (message.type === 'VERSE_AUTH_SUCCESS' && message.data) {
-    const { userId, email, name } = message.data;
+    const { userId, email, name, idToken } = message.data;
     const shouldOpenSidePanel = message.openSidePanel === true;
 
     // Store auth data in chrome.storage
@@ -998,6 +998,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
         userId,
         userEmail: email,
         userName: name,
+        userIdToken: idToken,
         isAuthenticated: true,
       },
       async () => {
@@ -1024,7 +1025,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
         chrome.runtime
           .sendMessage({
             type: 'VERSE_AUTH_SUCCESS',
-            data: { userId, email, name },
+            data: { userId, email, name, idToken },
           })
           .catch(() => {
             // Ignore errors if no listeners
@@ -1044,7 +1045,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
       logger.info('[background] isAuthenticated set to false');
 
       // Clear auth data immediately
-      await chrome.storage.local.remove(['userId', 'userEmail', 'userName']);
+      await chrome.storage.local.remove(['userId', 'userEmail', 'userName', 'userIdToken']);
       logger.info('[background] Auth data cleared from storage');
 
       // NOTIFY all side panels about the sign out - they will show sign-in page
