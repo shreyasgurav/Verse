@@ -52,7 +52,7 @@ export async function extractMemoriesFromPrompt(
   const trimmed = prompt.trim();
 
   // Skip empty or very short prompts
-  if (!trimmed || trimmed.length < 10) {
+  if (!trimmed || trimmed.length < 5) {
     return { shouldSave: false, memories: [] };
   }
 
@@ -80,7 +80,7 @@ export async function extractMemoriesFromPrompt(
   if (preferencePatterns.some(pattern => pattern.test(trimmed))) {
     // Check if similar preference already exists
     const isDuplicate = existingMemories.some(
-      mem => mem.category === 'preference' && calculateSimilarity(mem.content, trimmed) > 0.7,
+      mem => mem.category === 'preference' && calculateSimilarity(mem.content, trimmed) > 0.85,
     );
 
     if (!isDuplicate) {
@@ -98,14 +98,17 @@ export async function extractMemoriesFromPrompt(
   const factPatterns = [
     /(?:i am|i'm)\s+(?:a|an|the|from)/i,
     /my\s+name\s+is/i,
-    /i\s+(?:work|live|study|teach)\s+(?:at|in|as)/i,
+    /i\s+(?:work|live|study|teach|attend|go to|graduated from)\s+(?:at|in|as|from)/i,
     /i\s+have\s+(?:a|an|the|\d+)/i,
-    /my\s+(?:email|phone|address|age)/i,
+    /my\s+(?:email|phone|address|age|college|university|school)/i,
+    /(?:i study|i studied|i'm studying)\s+(?:at|in)/i,
+    /my\s+(?:degree|major|field)\s+is/i,
+    /i\s+(?:am|was)\s+(?:at|from)\s+[A-Z]/i, // "I am at MIT", "I was from Harvard"
   ];
 
   if (factPatterns.some(pattern => pattern.test(trimmed))) {
     const isDuplicate = existingMemories.some(
-      mem => mem.category === 'fact' && calculateSimilarity(mem.content, trimmed) > 0.7,
+      mem => mem.category === 'fact' && calculateSimilarity(mem.content, trimmed) > 0.85,
     );
 
     if (!isDuplicate) {
@@ -165,13 +168,75 @@ export async function extractMemoriesFromPrompt(
       const phone = phoneMatch[1].trim();
       const phoneMemory = `User's phone number is ${phone}`;
       const phoneExists = existingMemories.some(
-        mem => mem.subcategory === 'phone' && calculateSimilarity(mem.content, phoneMemory) > 0.7,
+        mem => mem.subcategory === 'phone' && calculateSimilarity(mem.content, phoneMemory) > 0.85,
       );
       if (!phoneExists) {
         memories.push({
           content: phoneMemory,
           category: 'personal_info',
           subcategory: 'phone',
+          importance: 'high',
+          confidence: 'high',
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    // Extract college/university/school
+    const collegeMatch = trimmed.match(
+      /(?:i (?:study|studied|attend|attended|go to|went to|am at|was at|graduated from)|my (?:college|university|school) is)\s+(?:at\s+)?([A-Z][A-Za-z\s&]+(?:University|College|Institute|School|Academy))/i,
+    );
+    if (collegeMatch && collegeMatch[1]) {
+      const college = collegeMatch[1].trim();
+      const collegeMemory = `User studies at ${college}`;
+      const collegeExists = existingMemories.some(
+        mem => mem.subcategory === 'school' && calculateSimilarity(mem.content, collegeMemory) > 0.85,
+      );
+      if (!collegeExists) {
+        memories.push({
+          content: collegeMemory,
+          category: 'fact',
+          subcategory: 'school',
+          importance: 'high',
+          confidence: 'high',
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    // Extract company/work
+    const companyMatch = trimmed.match(/(?:i work at|working at|employed at|my company is)\s+([A-Z][A-Za-z\s&]+)/i);
+    if (companyMatch && companyMatch[1]) {
+      const company = companyMatch[1].trim();
+      const companyMemory = `User works at ${company}`;
+      const companyExists = existingMemories.some(
+        mem => mem.subcategory === 'company' && calculateSimilarity(mem.content, companyMemory) > 0.85,
+      );
+      if (!companyExists) {
+        memories.push({
+          content: companyMemory,
+          category: 'fact',
+          subcategory: 'company',
+          importance: 'high',
+          confidence: 'high',
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    // Extract location/city
+    const locationMatch = trimmed.match(/(?:i live in|i'm from|i am from|my city is)\s+([A-Z][A-Za-z\s,]+)/i);
+    if (locationMatch && locationMatch[1]) {
+      const location = locationMatch[1].trim();
+      const locationMemory = `User lives in ${location}`;
+      const locationExists = existingMemories.some(
+        mem => mem.subcategory === 'location' && calculateSimilarity(mem.content, locationMemory) > 0.85,
+      );
+      if (!locationExists) {
+        memories.push({
+          content: locationMemory,
+          category: 'personal_info',
+          subcategory: 'location',
           importance: 'high',
           confidence: 'high',
           timestamp: Date.now(),
@@ -189,7 +254,7 @@ export async function extractMemoriesFromPrompt(
 
   if (goalPatterns.some(pattern => pattern.test(trimmed))) {
     const isDuplicate = existingMemories.some(
-      mem => mem.category === 'goal' && calculateSimilarity(mem.content, trimmed) > 0.7,
+      mem => mem.category === 'goal' && calculateSimilarity(mem.content, trimmed) > 0.85,
     );
 
     if (!isDuplicate) {
@@ -211,7 +276,7 @@ export async function extractMemoriesFromPrompt(
 
   if (skillPatterns.some(pattern => pattern.test(trimmed))) {
     const isDuplicate = existingMemories.some(
-      mem => mem.category === 'skill' && calculateSimilarity(mem.content, trimmed) > 0.7,
+      mem => mem.category === 'skill' && calculateSimilarity(mem.content, trimmed) > 0.85,
     );
 
     if (!isDuplicate) {

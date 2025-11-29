@@ -24,8 +24,6 @@ import ChatHistoryList from './components/ChatHistoryList';
 import BookmarkList from './components/BookmarkList';
 import { EventType, type AgentEvent, ExecutionState } from './types/event';
 import './SidePanel.css';
-import { saveUserMemory } from './services/memoryStore';
-import { ensureFirebaseUser, signOutFirebaseUser } from './services/firebase';
 import {
   extractMemoriesFromPrompt,
   type ExtractedMemory,
@@ -38,7 +36,7 @@ import {
   findRelevantMemories,
   formatMemoriesAsContext,
 } from './services/embeddingService';
-import { Clock, Trash2 } from 'lucide-react';
+import { Clock, Trash2, Plus } from 'lucide-react';
 
 // Declare chrome API types
 declare global {
@@ -114,13 +112,6 @@ const getDefaultProviderConfig = (providerId: string): ProviderConfig => {
   };
 };
 
-type UserAuthState = {
-  userId: string;
-  email: string;
-  name: string;
-  idToken?: string;
-};
-
 const SidePanel = () => {
   const progressMessage = 'Showing progress...';
   const [messages, setMessages] = useState<Message[]>([]);
@@ -149,8 +140,6 @@ const SidePanel = () => {
   const setInputTextRef = useRef<((text: string) => void) | null>(null);
   const taskTimeoutRef = useRef<number | null>(null);
   const [currentTabMeta, setCurrentTabMeta] = useState<{ title: string; icon?: string; url?: string } | null>(null);
-  const [userAuth, setUserAuth] = useState<UserAuthState | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
   // Tab-specific state
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
@@ -177,6 +166,8 @@ const SidePanel = () => {
   const [showMemories, setShowMemories] = useState(false);
   const [memories, setMemories] = useState<MemoryWithEmbedding[]>([]);
   const [embeddingApiKey, setEmbeddingApiKey] = useState<string>('');
+  const [showAddMemory, setShowAddMemory] = useState(false);
+  const [newMemoryText, setNewMemoryText] = useState('');
 
   const loadLocalMemories = useCallback(async () => {
     try {
@@ -276,21 +267,87 @@ const SidePanel = () => {
     [embeddingApiKey],
   );
 
-  const persistMemoryEntry = useCallback(
-    async (text: string) => {
-      if (!isAuthenticated || !userAuth?.userId || !userAuth?.idToken || !text.trim()) {
-        return;
+  const addManualMemory = useCallback(async () => {
+    const text = newMemoryText.trim();
+    if (!text) return;
+    try {
+      const res = await chrome.storage.local.get(['verse_memories']);
+      const existing: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
+
+      // Use the extraction logic to properly categorize and extract structured data
+      const extractionResult = await extractMemoriesFromPrompt(text, existing);
+
+      let memoriesToAdd: ExtractedMemory[] = [];
+
+      if (extractionResult.shouldSave && extractionResult.memories.length > 0) {
+        // Use extracted memories (with proper categories and subcategories)
+        memoriesToAdd = extractionResult.memories;
+        console.log(`Manual memory: Extracted ${memoriesToAdd.length} structured memories`);
+      } else {
+        // Fallback: Save as-is but still try to detect subcategory
+        const lowerText = text.toLowerCase();
+        let subcategory: 'name' | 'email' | 'phone' | 'location' | 'school' | 'company' | undefined;
+        let category: 'personal_info' | 'preference' | 'fact' | 'skill' | 'context' | 'goal' = 'fact';
+
+        // Detect subcategory from content
+        if (lowerText.includes('name') || /my name is|i am|i'm [A-Z]/.test(text)) {
+          subcategory = 'name';
+          category = 'personal_info';
+        } else if (lowerText.includes('@') || lowerText.includes('email')) {
+          subcategory = 'email';
+          category = 'personal_info';
+        } else if (lowerText.includes('phone') || lowerText.includes('mobile') || lowerText.includes('cell')) {
+          subcategory = 'phone';
+          category = 'personal_info';
+        } else if (
+          lowerText.includes('college') ||
+          lowerText.includes('university') ||
+          lowerText.includes('school') ||
+          lowerText.includes('study')
+        ) {
+          subcategory = 'school';
+          category = 'fact';
+        } else if (lowerText.includes('work') || lowerText.includes('company') || lowerText.includes('employer')) {
+          subcategory = 'company';
+          category = 'fact';
+        } else if (lowerText.includes('live') || lowerText.includes('city') || lowerText.includes('location')) {
+          subcategory = 'location';
+          category = 'personal_info';
+        }
+
+        memoriesToAdd = [
+          {
+            content: text,
+            category,
+            subcategory,
+            importance: 'high',
+            confidence: 'high',
+            timestamp: Date.now(),
+          },
+        ];
+        console.log(`Manual memory: Saved with category=${category}, subcategory=${subcategory || 'none'}`);
       }
 
-      try {
-        await ensureFirebaseUser(userAuth.idToken, userAuth.userId);
-        await saveUserMemory(userAuth.userId, text);
-      } catch (error) {
-        console.error('Failed to save memory entry:', error);
+      const updated = [...memoriesToAdd, ...existing].slice(0, 200);
+
+      let apiKey = embeddingApiKey;
+      if (!apiKey) {
+        const allProviders = await llmProviderStore.getAllProviders();
+        const openAIProvider = Object.values(allProviders).find(p => p.type === ProviderTypeEnum.OpenAI);
+        if (openAIProvider?.apiKey) {
+          apiKey = openAIProvider.apiKey;
+        }
       }
-    },
-    [isAuthenticated, userAuth],
-  );
+
+      const withEmbeddings = await generateMemoryEmbeddings(updated, apiKey);
+      await chrome.storage.local.set({ verse_memories: withEmbeddings });
+      setMemories(withEmbeddings.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
+      setNewMemoryText('');
+      setShowAddMemory(false);
+    } catch (e) {
+      console.error('Failed to add manual memory', e);
+    }
+  }, [newMemoryText, embeddingApiKey]);
 
   // Function to initialize tab context (extracted for reuse)
   const initializeTabContext = useCallback(async (forceTabId?: number) => {
@@ -556,25 +613,8 @@ const SidePanel = () => {
   // Check if models are configured
   const checkModelConfiguration = useCallback(async () => {
     try {
-      // Check if user is authenticated
-      const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
-      const isUserAuthenticated = authResult.isAuthenticated === true && authResult.userId;
-
-      console.log('[SidePanel] checkModelConfiguration:', {
-        isUserAuthenticated,
-        userId: authResult.userId,
-        isAuthenticated: authResult.isAuthenticated,
-      });
-
-      // If user is authenticated, they can use the app (with our API keys)
-      if (isUserAuthenticated) {
-        console.log('🔍 User is authenticated, allowing access with default API');
-        setHasConfiguredModels(true);
-        return;
-      }
-
-      // User is NOT authenticated - check if they have configured their own models
-      console.log('🔍 User is NOT authenticated, checking for configured models');
+      // Check if user has configured their own models
+      console.log('🔍 Checking for configured models');
       const configuredAgents = await agentModelStore.getConfiguredAgents();
 
       // CRITICAL: Check if BOTH planner AND navigator are configured
@@ -823,216 +863,7 @@ const SidePanel = () => {
     };
   }, [checkModelConfiguration, loadGeneralSettings, reloadCurrentSession, initializeTabContext]);
 
-  // Load user auth from storage and handle auth callbacks
-  useEffect(() => {
-    let authCheckInterval: NodeJS.Timeout | null = null;
-
-    const loadUserAuth = async () => {
-      try {
-        const result = await chrome.storage.local.get([
-          'userId',
-          'userEmail',
-          'userName',
-          'userIdToken',
-          'isAuthenticated',
-        ]);
-        // Only set auth if user is authenticated
-        if (result.userId && result.isAuthenticated === true) {
-          setUserAuth({
-            userId: result.userId,
-            email: result.userEmail || '',
-            name: result.userName || '',
-            idToken: typeof result.userIdToken === 'string' ? result.userIdToken : undefined,
-          });
-          setIsAuthenticated(true);
-        } else {
-          // Clear auth state if not authenticated
-          setUserAuth(null);
-          setIsAuthenticated(false);
-        }
-      } catch (error) {
-        console.error('Error loading user auth:', error);
-        setUserAuth(null);
-        setIsAuthenticated(false);
-      }
-    };
-
-    // Continuously check authentication status every 2 seconds
-    const checkAuthStatus = async () => {
-      try {
-        const result = await chrome.storage.local.get(['isAuthenticated', 'userId']);
-
-        // If authentication is lost, close the side panel immediately
-        const storageIsAuthenticated = result.isAuthenticated === true;
-        const hasUserId = !!result.userId;
-
-        if (!storageIsAuthenticated) {
-          // Not authenticated in storage - clear state if it was previously set
-          if (isAuthenticated || userAuth !== null || hasUserId) {
-            console.log('[SidePanel] Authentication lost, showing sign-in page', {
-              storageIsAuthenticated,
-              hasUserId,
-              userAuth,
-            });
-            setUserAuth(null);
-            setIsAuthenticated(false);
-            // Trigger model configuration check to show sign-in page
-            checkModelConfiguration();
-          }
-        } else if (storageIsAuthenticated && hasUserId) {
-          // Authenticated in storage - ensure state is set
-          if (!isAuthenticated) {
-            setIsAuthenticated(true);
-            loadUserAuth();
-          }
-        }
-      } catch (error) {
-        console.error('[SidePanel] Error checking auth status:', error);
-      }
-    };
-
-    // Listen for storage changes (when auth happens in another tab)
-    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
-      if (areaName === 'local') {
-        // Check for auth-related changes
-        if (changes.userId || changes.userEmail || changes.userName || changes.userIdToken || changes.isAuthenticated) {
-          // If isAuthenticated was removed or set to false, clear auth state immediately
-          if (
-            changes.isAuthenticated?.newValue === false ||
-            (changes.isAuthenticated?.oldValue === true && changes.isAuthenticated?.newValue === undefined)
-          ) {
-            console.log(
-              '[SidePanel] Storage change: Auth state changed to false/undefined, clearing auth and showing sign-in page',
-            );
-            setUserAuth(null);
-            setIsAuthenticated(false);
-            // Trigger model configuration check to show sign-in page
-            checkModelConfiguration();
-          } else if (changes.isAuthenticated?.newValue === true) {
-            // Auth was set to true, reload auth data
-            console.log('[SidePanel] Storage change: Auth state changed to true, loading auth data');
-            setIsAuthenticated(true);
-            loadUserAuth();
-          } else {
-            // Other auth-related changes, reload auth data
-            loadUserAuth();
-          }
-        }
-      }
-    };
-
-    loadUserAuth();
-
-    // Poll for auth data from the auth website
-    // The auth website stores data in localStorage which we can't access directly,
-    // but we can check chrome.storage which the background script updates
-    const pollInterval = setInterval(() => {
-      loadUserAuth();
-    }, 1000); // Check every second
-
-    // SECURITY: Continuously verify authentication status every 2 seconds
-    authCheckInterval = setInterval(() => {
-      checkAuthStatus();
-    }, 2000);
-
-    chrome.storage.onChanged.addListener(handleStorageChange);
-
-    // Listen for messages from background script
-    const handleRuntimeMessage = (message: any) => {
-      if (message.type === 'VERSE_AUTH_SUCCESS' && message.data) {
-        const { userId, email, name, idToken } = message.data;
-        const authData: UserAuthState = { userId, email, name, idToken };
-        setUserAuth(authData);
-        setIsAuthenticated(true);
-        chrome.storage.local.set({
-          userId,
-          userEmail: email,
-          userName: name,
-          userIdToken: idToken,
-          isAuthenticated: true,
-        });
-        // Reload model configuration check
-        checkModelConfiguration();
-      } else if (message.type === 'VERSE_AUTH_SIGNOUT') {
-        // Clear auth state immediately
-        console.log('[SidePanel] VERSE_AUTH_SIGNOUT received, clearing auth and showing sign-in page');
-        setUserAuth(null);
-        setIsAuthenticated(false);
-        // The background script has already cleared storage, just update UI
-        checkModelConfiguration();
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
-
-    return () => {
-      clearInterval(pollInterval);
-      if (authCheckInterval) {
-        clearInterval(authCheckInterval);
-      }
-      chrome.storage.onChanged.removeListener(handleStorageChange);
-      chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
-    };
-  }, [checkModelConfiguration, userAuth]);
-
-  useEffect(() => {
-    const syncFirebaseAuth = async () => {
-      if (isAuthenticated && userAuth?.idToken) {
-        try {
-          await ensureFirebaseUser(userAuth.idToken, userAuth.userId);
-        } catch (error) {
-          console.error('Failed to authenticate with Firebase:', error);
-        }
-      } else {
-        try {
-          await signOutFirebaseUser();
-        } catch (error) {
-          console.error('Failed to sign out from Firebase:', error);
-        }
-      }
-    };
-
-    syncFirebaseAuth();
-  }, [isAuthenticated, userAuth?.idToken, userAuth?.userId]);
-
-  const handleGoogleSignIn = () => {
-    const authWebsiteUrl = import.meta.env.VITE_AUTH_WEBSITE_URL || 'https://www.useverseai.com';
-    const extensionId = chrome.runtime.id;
-    const authUrl = `${authWebsiteUrl}?extensionId=${extensionId}`;
-
-    // Open auth website in a new tab
-    chrome.tabs.create({ url: authUrl }, tab => {
-      // Listen for when the auth tab is closed
-      const tabId = tab.id;
-      if (!tabId) return;
-
-      const checkTabClosed = setInterval(() => {
-        chrome.tabs.get(tabId, tab => {
-          if (chrome.runtime.lastError || !tab) {
-            // Tab was closed, check for auth data
-            clearInterval(checkTabClosed);
-            chrome.storage.local.get(['userId', 'userEmail', 'userName', 'isAuthenticated'], result => {
-              if (result.userId && result.isAuthenticated === true) {
-                setUserAuth({
-                  userId: result.userId,
-                  email: result.userEmail || '',
-                  name: result.userName || '',
-                });
-                setIsAuthenticated(true);
-              } else {
-                setUserAuth(null);
-                setIsAuthenticated(false);
-              }
-            });
-          }
-        });
-      }, 500);
-
-      // Stop checking after 5 minutes
-      setTimeout(() => clearInterval(checkTabClosed), 300000);
-    });
-  };
-
+  // Load user auth from storage
   useEffect(() => {
     sessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
@@ -1665,8 +1496,6 @@ const SidePanel = () => {
     // Save to local storage FIRST (so it's available for next prompt)
     // Don't await - let it run in background
     savePromptToLocal(memoryText).catch(err => console.error('Memory save error:', err));
-    // Also attempt to save to remote memory store if available
-    persistMemoryEntry(memoryText).catch(err => console.error('Remote memory save error:', err));
 
     // Retrieve relevant memories for context
     let promptWithContext = trimmedText;
@@ -2089,28 +1918,26 @@ const SidePanel = () => {
               </button>
               <span className="instant-tooltip">Memories</span>
             </div>
-            {isAuthenticated && userAuth && (
-              <div className="relative group">
-                <button
-                  type="button"
-                  onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      handleSendMessage('/summarize_page', 'Summarize page');
-                    }
-                  }}
-                  className={`header-icon text-white hover:text-white cursor-pointer`}
-                  aria-label={'Summarize page'}
-                  tabIndex={0}>
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
-                    segment
-                  </span>
-                </button>
-                <span className="instant-tooltip">Summarize page</span>
-              </div>
-            )}
+            <div className="relative group">
+              <button
+                type="button"
+                onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    handleSendMessage('/summarize_page', 'Summarize page');
+                  }
+                }}
+                className={`header-icon text-white hover:text-white cursor-pointer`}
+                aria-label={'Summarize page'}
+                tabIndex={0}>
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
+                  segment
+                </span>
+              </button>
+              <span className="instant-tooltip">Summarize page</span>
+            </div>
             <button
               type="button"
               onClick={() => chrome.runtime.openOptionsPage()}
@@ -2135,6 +1962,16 @@ const SidePanel = () => {
           </div>
         ) : showMemories ? (
           <div className="flex-1 overflow-x-hidden overflow-y-auto p-3" style={{ backgroundColor: '#242424' }}>
+            <div className="flex items-center justify-end mb-2">
+              <button
+                className="inline-flex items-center gap-1 text-white hover:text-gray-200 px-2 py-1 rounded-md border border-white/10 hover:bg-white/5"
+                aria-label="Add memory"
+                title="Add memory"
+                onClick={() => setShowAddMemory(true)}>
+                <Plus size={16} />
+                <span className="text-xs">Add</span>
+              </button>
+            </div>
             {memories.length === 0 ? (
               <div
                 className={`flex h-full items-center justify-center ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -2158,6 +1995,34 @@ const SidePanel = () => {
                 ))}
               </div>
             )}
+            {showAddMemory && (
+              <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/60 pr-6 pt-16">
+                <div className="w-full max-w-sm rounded-lg p-4 shadow-lg" style={{ backgroundColor: '#1f1f1f' }}>
+                  <div className="text-sm text-white/90 mb-2 font-medium">Add Memory</div>
+                  <textarea
+                    value={newMemoryText}
+                    onChange={e => setNewMemoryText(e.target.value)}
+                    className="w-full h-28 rounded-md p-2 text-sm bg-white/5 text-white placeholder-white/40 outline-none border border-white/10 focus:border-white/20"
+                    placeholder="Type something to remember"
+                  />
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button
+                      className="px-3 py-1.5 text-sm rounded-md border border-white/10 text-white/80 hover:bg-white/5"
+                      onClick={() => {
+                        setShowAddMemory(false);
+                        setNewMemoryText('');
+                      }}>
+                      Cancel
+                    </button>
+                    <button
+                      className="px-3 py-1.5 text-sm rounded-md bg-sky-600 hover:bg-sky-500 text-white"
+                      onClick={addManualMemory}>
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -2178,28 +2043,9 @@ const SidePanel = () => {
                 className={`flex flex-1 items-center justify-center px-8 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                 <div className="max-w-md w-full text-center">
                   <img src="/icon-128.png" alt="Verse Logo" className="mx-auto mb-6 size-20" />
-                  <p className="mb-4 text-base">
-                    To get started, please sign in with Google or configure your API Keys in settings.
-                  </p>
+                  <p className="mb-4 text-base">To get started, please configure your API Keys in settings.</p>
 
                   <div className="flex flex-col gap-3 items-center">
-                    {/* Sign in with Google Button */}
-                    <button
-                      onClick={handleGoogleSignIn}
-                      className={`px-6 py-2.5 text-sm font-medium rounded-full border-2 transition-colors flex items-center gap-2 ${
-                        isDarkMode
-                          ? 'border-gray-400 text-gray-300 hover:border-gray-300 hover:bg-gray-800/30'
-                          : 'border-gray-500 text-gray-700 hover:border-gray-600 hover:bg-gray-100/30'
-                      }`}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                      </svg>
-                      Sign in with Google
-                    </button>
-
                     {/* Open Settings Button */}
                     <button
                       onClick={() => chrome.runtime.openOptionsPage()}

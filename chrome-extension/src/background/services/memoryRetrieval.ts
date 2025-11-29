@@ -112,8 +112,10 @@ function extractKeywords(query: string): string[] {
     email: ['email', 'e-mail', 'mail', 'contact email', 'email address'],
     phone: ['phone', 'mobile', 'cell', 'telephone', 'number', 'contact number'],
     location: ['address', 'location', 'city', 'street', 'where', 'live'],
-    company: ['company', 'organization', 'employer', 'work at'],
+    company: ['company', 'organization', 'employer', 'work at', 'workplace'],
     employment: ['job', 'title', 'position', 'role', 'work'],
+    school: ['school', 'college', 'university', 'institute', 'education', 'studying', 'student'],
+    degree: ['degree', 'major', 'field of study', 'qualification'],
   };
 
   for (const [subcategory, synonyms] of Object.entries(keywordMap)) {

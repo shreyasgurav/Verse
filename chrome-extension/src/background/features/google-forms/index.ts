@@ -26,42 +26,13 @@ async function handleFillFormQuestion(message: any, sendResponse: (response?: an
       return;
     }
 
-    // Check if user is authenticated
-    const authResult = await chrome.storage.local.get(['userId', 'isAuthenticated']);
-    const isUserAuthenticated = authResult.isAuthenticated === true && authResult.userId;
+    // Get LLM settings from user configuration
+    const providers = await llmProviderStore.getAllProviders();
+    const agentModels = await agentModelStore.getAllAgentModels();
 
-    // Get LLM settings
-    let providers = await llmProviderStore.getAllProviders();
-    let agentModels = await agentModelStore.getAllAgentModels();
-
-    // If user is authenticated and no providers configured, use default API keys
-    if (isUserAuthenticated && Object.keys(providers).length === 0) {
-      logger.info('Using default API keys for authenticated user');
-
-      const defaultProvider = {
-        name: 'OpenAI (Default)',
-        type: 'openai' as any,
-        apiKey: import.meta.env.VITE_DEFAULT_OPENAI_API_KEY || '',
-        modelNames: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'],
-        createdAt: Date.now(),
-      };
-
-      providers = {
-        'openai-default': defaultProvider,
-      };
-
-      agentModels = {
-        [AgentNameEnum.Navigator]: {
-          provider: 'openai-default',
-          modelName: 'gpt-4o-mini',
-          parameters: {
-            temperature: 0.1,
-            maxTokens: 4096,
-          },
-        },
-      };
-    } else if (Object.keys(providers).length === 0) {
-      sendResponse({ ok: false, error: 'No API keys configured' });
+    // Check if user has configured API keys
+    if (Object.keys(providers).length === 0) {
+      sendResponse({ ok: false, error: 'No API keys configured. Please configure your API keys in Settings.' });
       return;
     }
 
