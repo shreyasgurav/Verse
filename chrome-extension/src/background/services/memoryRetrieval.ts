@@ -100,20 +100,50 @@ async function generateOpenAIEmbedding(text: string, apiKey: string): Promise<nu
 }
 
 /**
+ * Extract keywords from query for matching
+ */
+function extractKeywords(query: string): string[] {
+  const keywords: string[] = [];
+  const lowerQuery = query.toLowerCase();
+
+  // Common field labels and their keywords
+  const keywordMap: Record<string, string[]> = {
+    name: ['name', 'full name', 'first name', 'last name', 'your name'],
+    email: ['email', 'e-mail', 'mail', 'contact email', 'email address'],
+    phone: ['phone', 'mobile', 'cell', 'telephone', 'number', 'contact number'],
+    location: ['address', 'location', 'city', 'street', 'where', 'live'],
+    company: ['company', 'organization', 'employer', 'work at'],
+    employment: ['job', 'title', 'position', 'role', 'work'],
+  };
+
+  for (const [subcategory, synonyms] of Object.entries(keywordMap)) {
+    if (synonyms.some(syn => lowerQuery.includes(syn))) {
+      keywords.push(subcategory);
+    }
+  }
+
+  return keywords;
+}
+
+/**
  * Retrieve relevant memories for a query
  */
 export async function retrieveRelevantMemories(
   query: string,
   apiKey?: string,
   topK = 3,
-  minSimilarity = 0.5,
-): Promise<Array<{ content: string; category: string; similarity: number }>> {
+  minSimilarity = 0.3, // Lowered from 0.5 to 0.3 for better matching
+): Promise<Array<{ content: string; category: string; similarity: number; subcategory?: string }>> {
   try {
     // Load memories from storage
     const res = await chrome.storage.local.get(['verse_memories']);
     const memories: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
 
+    console.log(`[MemoryRetrieval] Query: "${query}"`);
+    console.log(`[MemoryRetrieval] Total memories: ${memories.length}`);
+
     if (memories.length === 0) {
+      console.log('[MemoryRetrieval] No memories found in storage');
       return [];
     }
 
@@ -135,19 +165,24 @@ export async function retrieveRelevantMemories(
     }
 
     // Calculate similarities
-    const results: Array<{ content: string; category: string; similarity: number }> = [];
+    const results: Array<{ content: string; category: string; similarity: number; subcategory?: string }> = [];
+    let memoriesWithEmbeddings = 0;
 
     for (const memory of memories) {
       if (!memory.embedding || memory.embedding.length === 0) {
+        console.log(`[MemoryRetrieval] Skipping memory without embedding: ${memory.content.substring(0, 50)}...`);
         continue;
       }
+      memoriesWithEmbeddings++;
 
       try {
         const similarity = cosineSimilarity(queryEmbedding, memory.embedding);
+        console.log(`[MemoryRetrieval] Similarity ${similarity.toFixed(3)}: ${memory.content.substring(0, 60)}...`);
         if (similarity >= minSimilarity) {
           results.push({
             content: memory.content,
             category: memory.category,
+            subcategory: memory.subcategory,
             similarity,
           });
         }
@@ -156,8 +191,49 @@ export async function retrieveRelevantMemories(
       }
     }
 
+    console.log(`[MemoryRetrieval] Checked ${memoriesWithEmbeddings} memories with embeddings`);
+    console.log(`[MemoryRetrieval] Found ${results.length} memories above threshold ${minSimilarity}`);
+
+    // Strategy: Keyword/Subcategory matching (highest priority for form filling)
+    const keywords = extractKeywords(query);
+    console.log(`[MemoryRetrieval] Extracted keywords: ${keywords.join(', ')}`);
+
+    if (keywords.length > 0) {
+      for (const memory of memories) {
+        // Check if memory subcategory matches extracted keywords
+        if (memory.subcategory && keywords.includes(memory.subcategory)) {
+          const existing = results.find(r => r.content === memory.content);
+          if (existing) {
+            // Boost score for subcategory match
+            existing.similarity = Math.max(existing.similarity, 0.95);
+            console.log(
+              `[MemoryRetrieval] ⭐ Subcategory match boosted: ${memory.content.substring(0, 60)}... (${memory.subcategory})`,
+            );
+          } else {
+            // Add with high score
+            results.push({
+              content: memory.content,
+              category: memory.category,
+              subcategory: memory.subcategory,
+              similarity: 0.95,
+            });
+            console.log(
+              `[MemoryRetrieval] ⭐ Subcategory match added: ${memory.content.substring(0, 60)}... (${memory.subcategory})`,
+            );
+          }
+        }
+      }
+    }
+
     // Sort by similarity and return top K
-    return results.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
+    const topResults = results.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
+    if (topResults.length > 0) {
+      console.log(`[MemoryRetrieval] Returning top ${topResults.length} memories:`);
+      topResults.forEach((r, i) => {
+        console.log(`  ${i + 1}. [${r.similarity.toFixed(3)}] ${r.content.substring(0, 60)}...`);
+      });
+    }
+    return topResults;
   } catch (error) {
     console.error('[MemoryRetrieval] Error retrieving memories:', error);
     return [];

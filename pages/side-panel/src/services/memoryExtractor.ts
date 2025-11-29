@@ -2,11 +2,34 @@
  * Intelligent memory extraction service
  * Identifies important information from user prompts using LLM
  * Based on ChatGPT and Supermemory memory patterns
+ *
+ * Enhanced with structured subcategories for better form filling
  */
+
+// Define types locally until @extension/shared exports them
+export type MemoryCategory = 'personal_info' | 'preference' | 'fact' | 'skill' | 'context' | 'goal';
+export type MemorySubcategory =
+  | 'name'
+  | 'email'
+  | 'phone'
+  | 'location'
+  | 'age'
+  | 'birthday'
+  | 'employment'
+  | 'job_title'
+  | 'company'
+  | 'education'
+  | 'degree'
+  | 'school'
+  | 'hobby'
+  | 'skill_specific'
+  | 'preference_specific'
+  | 'general';
 
 export interface ExtractedMemory {
   content: string;
-  category: 'preference' | 'fact' | 'goal' | 'context' | 'skill';
+  category: MemoryCategory;
+  subcategory?: MemorySubcategory;
   importance: 'high' | 'medium' | 'low';
   confidence: 'high' | 'medium' | 'low';
   timestamp: number;
@@ -77,6 +100,7 @@ export async function extractMemoriesFromPrompt(
     /my\s+name\s+is/i,
     /i\s+(?:work|live|study|teach)\s+(?:at|in|as)/i,
     /i\s+have\s+(?:a|an|the|\d+)/i,
+    /my\s+(?:email|phone|address|age)/i,
   ];
 
   if (factPatterns.some(pattern => pattern.test(trimmed))) {
@@ -92,6 +116,67 @@ export async function extractMemoriesFromPrompt(
         confidence: 'high',
         timestamp: Date.now(),
       });
+    }
+
+    // Also extract structured data for common fields
+    // This helps with form filling by creating more specific memories
+    const nameMatch = trimmed.match(/(?:my\s+name\s+is|i\s+am|i'm)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
+    if (nameMatch && nameMatch[1]) {
+      const name = nameMatch[1].trim();
+      const nameMemory = `User's name is ${name}`;
+      const nameExists = existingMemories.some(
+        mem => mem.subcategory === 'name' && calculateSimilarity(mem.content, nameMemory) > 0.7,
+      );
+      if (!nameExists) {
+        memories.push({
+          content: nameMemory,
+          category: 'personal_info',
+          subcategory: 'name',
+          importance: 'high',
+          confidence: 'high',
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    // Extract email
+    const emailMatch = trimmed.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+    if (emailMatch && emailMatch[1]) {
+      const email = emailMatch[1];
+      const emailMemory = `User's email is ${email}`;
+      const emailExists = existingMemories.some(
+        mem => mem.subcategory === 'email' && calculateSimilarity(mem.content, emailMemory) > 0.7,
+      );
+      if (!emailExists) {
+        memories.push({
+          content: emailMemory,
+          category: 'personal_info',
+          subcategory: 'email',
+          importance: 'high',
+          confidence: 'high',
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    // Extract phone
+    const phoneMatch = trimmed.match(/(?:phone|mobile|cell|number)(?:\s+is)?\s*:?\s*([+\d\s()-]{10,})/i);
+    if (phoneMatch && phoneMatch[1]) {
+      const phone = phoneMatch[1].trim();
+      const phoneMemory = `User's phone number is ${phone}`;
+      const phoneExists = existingMemories.some(
+        mem => mem.subcategory === 'phone' && calculateSimilarity(mem.content, phoneMemory) > 0.7,
+      );
+      if (!phoneExists) {
+        memories.push({
+          content: phoneMemory,
+          category: 'personal_info',
+          subcategory: 'phone',
+          importance: 'high',
+          confidence: 'high',
+          timestamp: Date.now(),
+        });
+      }
     }
   }
 

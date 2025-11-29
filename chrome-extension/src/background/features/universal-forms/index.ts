@@ -76,11 +76,17 @@ async function handleFillUniversalFormField(message: any, sendResponse: (respons
 
     // Retrieve relevant memories for this field
     const openAIKey = providerConfig.type === ProviderTypeEnum.OpenAI ? providerConfig.apiKey : undefined;
-    const relevantMemories = await retrieveRelevantMemories(field.context, openAIKey, 3, 0.5);
+    logger.info('Searching memories for field:', field.context);
+    const relevantMemories = await retrieveRelevantMemories(field.context, openAIKey, 3, 0.3);
     const memoryContext = formatMemoriesForPrompt(relevantMemories);
 
     if (relevantMemories.length > 0) {
-      logger.info(`Found ${relevantMemories.length} relevant memories for field:`, field.context);
+      logger.info(`✅ Found ${relevantMemories.length} relevant memories for field:`, field.context);
+      relevantMemories.forEach((m, i) => {
+        logger.info(`  ${i + 1}. [${m.similarity.toFixed(3)}] ${m.content.substring(0, 60)}...`);
+      });
+    } else {
+      logger.info('❌ No relevant memories found for field:', field.context);
     }
 
     // Build context-rich prompt
