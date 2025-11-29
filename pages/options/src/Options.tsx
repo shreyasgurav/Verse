@@ -3,15 +3,17 @@ import '@src/Options.css';
 import { Button } from '@extension/ui';
 import { withErrorBoundary, withSuspense } from '@extension/shared';
 import { t } from '@extension/i18n';
-import { FiSettings, FiCpu } from 'react-icons/fi';
+import { FiSettings, FiCpu, FiClock } from 'react-icons/fi';
 import { GeneralSettings } from './components/GeneralSettings';
 import { ModelSettings } from './components/ModelSettings';
+import { MemorySettings } from './components/MemorySettings';
 
-type TabTypes = 'general' | 'models';
+type TabTypes = 'general' | 'models' | 'memories';
 
 const TABS: { id: TabTypes; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
   { id: 'general', icon: FiSettings, label: t('options_tabs_general') },
   { id: 'models', icon: FiCpu, label: t('options_tabs_models') },
+  { id: 'memories', icon: FiClock, label: 'Memories' },
 ];
 
 const Options = () => {
@@ -41,18 +43,17 @@ const Options = () => {
         return <GeneralSettings isDarkMode={isDarkMode} />;
       case 'models':
         return <ModelSettings isDarkMode={isDarkMode} />;
+      case 'memories':
+        return <MemorySettings isDarkMode={isDarkMode} />;
       default:
         return null;
     }
   };
 
   return (
-    <div
-      className={`flex min-h-screen min-w-[768px] ${isDarkMode ? 'text-gray-200' : 'text-gray-200'}`}>
+    <div className={`flex min-h-screen min-w-[768px] ${isDarkMode ? 'text-gray-200' : 'text-gray-200'}`}>
       {/* Vertical Navigation Bar */}
-      <nav
-        className={`w-48 backdrop-blur-sm`}
-        style={{ backgroundColor: '#242424' }}>
+      <nav className={`w-48 backdrop-blur-sm`} style={{ backgroundColor: '#242424' }}>
         <div className="px-4 pt-16">
           {/* Title removed per request */}
           <ul className="space-y-2">

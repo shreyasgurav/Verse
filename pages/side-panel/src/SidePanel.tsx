@@ -36,7 +36,6 @@ import {
   findRelevantMemories,
   formatMemoriesAsContext,
 } from './services/embeddingService';
-import { Clock, Trash2, Plus } from 'lucide-react';
 
 // Declare chrome API types
 declare global {
@@ -122,8 +121,10 @@ const SidePanel = () => {
   const [chatSessions, setChatSessions] = useState<Array<{ id: string; title: string; createdAt: number }>>([]);
   const [isFollowUpMode, setIsFollowUpMode] = useState(false);
   const [isHistoricalSession, setIsHistoricalSession] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
   const [favoritePrompts, setFavoritePrompts] = useState<FavoritePrompt[]>([]);
+  const [embeddingApiKey, setEmbeddingApiKey] = useState<string>('');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [hasConfiguredModels, setHasConfiguredModels] = useState<boolean | null>(null); // null = loading, false = no models, true = has models
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayEnabled, setReplayEnabled] = useState(false);
@@ -161,37 +162,6 @@ const SidePanel = () => {
   const [singleModel, setSingleModel] = useState<string>('');
   const [singleApiKey, setSingleApiKey] = useState<string>('');
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({});
-
-  // Local memory state
-  const [showMemories, setShowMemories] = useState(false);
-  const [memories, setMemories] = useState<MemoryWithEmbedding[]>([]);
-  const [embeddingApiKey, setEmbeddingApiKey] = useState<string>('');
-  const [showAddMemory, setShowAddMemory] = useState(false);
-  const [newMemoryText, setNewMemoryText] = useState('');
-
-  const loadLocalMemories = useCallback(async () => {
-    try {
-      const res = await chrome.storage.local.get(['verse_memories']);
-      const items: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
-      // Newest first
-      setMemories(items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
-    } catch (e) {
-      console.error('Failed to load local memories', e);
-      setMemories([]);
-    }
-  }, []);
-
-  const deleteLocalMemory = useCallback(async (timestamp: number) => {
-    try {
-      const res = await chrome.storage.local.get(['verse_memories']);
-      const items: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
-      const next = items.filter(item => item.timestamp !== timestamp);
-      await chrome.storage.local.set({ verse_memories: next });
-      setMemories(prev => prev.filter(item => item.timestamp !== timestamp));
-    } catch (e) {
-      console.error('Failed to delete local memory', e);
-    }
-  }, []);
 
   const savePromptToLocal = useCallback(
     async (content: string) => {
@@ -266,88 +236,6 @@ const SidePanel = () => {
     },
     [embeddingApiKey],
   );
-
-  const addManualMemory = useCallback(async () => {
-    const text = newMemoryText.trim();
-    if (!text) return;
-    try {
-      const res = await chrome.storage.local.get(['verse_memories']);
-      const existing: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
-
-      // Use the extraction logic to properly categorize and extract structured data
-      const extractionResult = await extractMemoriesFromPrompt(text, existing);
-
-      let memoriesToAdd: ExtractedMemory[] = [];
-
-      if (extractionResult.shouldSave && extractionResult.memories.length > 0) {
-        // Use extracted memories (with proper categories and subcategories)
-        memoriesToAdd = extractionResult.memories;
-        console.log(`Manual memory: Extracted ${memoriesToAdd.length} structured memories`);
-      } else {
-        // Fallback: Save as-is but still try to detect subcategory
-        const lowerText = text.toLowerCase();
-        let subcategory: 'name' | 'email' | 'phone' | 'location' | 'school' | 'company' | undefined;
-        let category: 'personal_info' | 'preference' | 'fact' | 'skill' | 'context' | 'goal' = 'fact';
-
-        // Detect subcategory from content
-        if (lowerText.includes('name') || /my name is|i am|i'm [A-Z]/.test(text)) {
-          subcategory = 'name';
-          category = 'personal_info';
-        } else if (lowerText.includes('@') || lowerText.includes('email')) {
-          subcategory = 'email';
-          category = 'personal_info';
-        } else if (lowerText.includes('phone') || lowerText.includes('mobile') || lowerText.includes('cell')) {
-          subcategory = 'phone';
-          category = 'personal_info';
-        } else if (
-          lowerText.includes('college') ||
-          lowerText.includes('university') ||
-          lowerText.includes('school') ||
-          lowerText.includes('study')
-        ) {
-          subcategory = 'school';
-          category = 'fact';
-        } else if (lowerText.includes('work') || lowerText.includes('company') || lowerText.includes('employer')) {
-          subcategory = 'company';
-          category = 'fact';
-        } else if (lowerText.includes('live') || lowerText.includes('city') || lowerText.includes('location')) {
-          subcategory = 'location';
-          category = 'personal_info';
-        }
-
-        memoriesToAdd = [
-          {
-            content: text,
-            category,
-            subcategory,
-            importance: 'high',
-            confidence: 'high',
-            timestamp: Date.now(),
-          },
-        ];
-        console.log(`Manual memory: Saved with category=${category}, subcategory=${subcategory || 'none'}`);
-      }
-
-      const updated = [...memoriesToAdd, ...existing].slice(0, 200);
-
-      let apiKey = embeddingApiKey;
-      if (!apiKey) {
-        const allProviders = await llmProviderStore.getAllProviders();
-        const openAIProvider = Object.values(allProviders).find(p => p.type === ProviderTypeEnum.OpenAI);
-        if (openAIProvider?.apiKey) {
-          apiKey = openAIProvider.apiKey;
-        }
-      }
-
-      const withEmbeddings = await generateMemoryEmbeddings(updated, apiKey);
-      await chrome.storage.local.set({ verse_memories: withEmbeddings });
-      setMemories(withEmbeddings.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
-      setNewMemoryText('');
-      setShowAddMemory(false);
-    } catch (e) {
-      console.error('Failed to add manual memory', e);
-    }
-  }, [newMemoryText, embeddingApiKey]);
 
   // Function to initialize tab context (extracted for reuse)
   const initializeTabContext = useCallback(async (forceTabId?: number) => {
@@ -1895,32 +1783,6 @@ const SidePanel = () => {
             <div className="relative group">
               <button
                 type="button"
-                onClick={() => {
-                  setShowMemories(prev => {
-                    const next = !prev;
-                    if (next) void loadLocalMemories();
-                    return next;
-                  });
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    setShowMemories(prev => {
-                      const next = !prev;
-                      if (next) void loadLocalMemories();
-                      return next;
-                    });
-                  }
-                }}
-                className={`header-icon text-white hover:text-white cursor-pointer`}
-                aria-label={'Memory'}
-                tabIndex={0}>
-                <Clock size={16} />
-              </button>
-              <span className="instant-tooltip">Memories</span>
-            </div>
-            <div className="relative group">
-              <button
-                type="button"
                 onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
@@ -1959,70 +1821,6 @@ const SidePanel = () => {
               visible={true}
               isDarkMode={isDarkMode}
             />
-          </div>
-        ) : showMemories ? (
-          <div className="flex-1 overflow-x-hidden overflow-y-auto p-3" style={{ backgroundColor: '#242424' }}>
-            <div className="flex items-center justify-end mb-2">
-              <button
-                className="inline-flex items-center gap-1 text-white hover:text-gray-200 px-2 py-1 rounded-md border border-white/10 hover:bg-white/5"
-                aria-label="Add memory"
-                title="Add memory"
-                onClick={() => setShowAddMemory(true)}>
-                <Plus size={16} />
-                <span className="text-xs">Add</span>
-              </button>
-            </div>
-            {memories.length === 0 ? (
-              <div
-                className={`flex h-full items-center justify-center ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                No saved prompts yet
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {memories.map((m, idx) => (
-                  <div key={idx} className="p-3 rounded-md" style={{ backgroundColor: '#2b2b2b' }}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-sm text-white whitespace-pre-wrap flex-1">{m.content}</div>
-                      <button
-                        className="text-red-300 hover:text-red-200 p-1 rounded flex-shrink-0"
-                        aria-label="Delete memory"
-                        title="Delete"
-                        onClick={() => deleteLocalMemory(m.timestamp)}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {showAddMemory && (
-              <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/60 pr-6 pt-16">
-                <div className="w-full max-w-sm rounded-lg p-4 shadow-lg" style={{ backgroundColor: '#1f1f1f' }}>
-                  <div className="text-sm text-white/90 mb-2 font-medium">Add Memory</div>
-                  <textarea
-                    value={newMemoryText}
-                    onChange={e => setNewMemoryText(e.target.value)}
-                    className="w-full h-28 rounded-md p-2 text-sm bg-white/5 text-white placeholder-white/40 outline-none border border-white/10 focus:border-white/20"
-                    placeholder="Type something to remember"
-                  />
-                  <div className="mt-3 flex justify-end gap-2">
-                    <button
-                      className="px-3 py-1.5 text-sm rounded-md border border-white/10 text-white/80 hover:bg-white/5"
-                      onClick={() => {
-                        setShowAddMemory(false);
-                        setNewMemoryText('');
-                      }}>
-                      Cancel
-                    </button>
-                    <button
-                      className="px-3 py-1.5 text-sm rounded-md bg-sky-600 hover:bg-sky-500 text-white"
-                      onClick={addManualMemory}>
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         ) : (
           <>
