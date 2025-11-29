@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
-interface LandingPageProps {
-  onSignIn: () => void;
-  isAuthenticated: boolean;
-  userName?: string;
-  onSignOut?: () => void;
-}
+interface LandingPageProps {}
 
-export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: LandingPageProps) {
+export default function LandingPage({}: LandingPageProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const heroTitleRef = useRef<HTMLDivElement>(null);
@@ -139,15 +134,13 @@ export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: La
               <img src="/verse-logo.png" alt="Verse" />
             </div>
             <nav className="nav">
-              {isAuthenticated ? (
-                <button onClick={onSignOut} className="btn-signin">
-                  Sign Out
-                </button>
-              ) : (
-                <button onClick={onSignIn} className="btn-signin">
-                  Sign In
-                </button>
-              )}
+              <a
+                href="https://chromewebstore.google.com/detail/verse-agentic-browser/eilgeegkhgchcfhekepmojbocceamoee"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-download-header">
+                Get for Chrome
+              </a>
             </nav>
           </div>
         </div>
@@ -176,9 +169,6 @@ export default function LandingPage({ onSignIn, isAuthenticated, onSignOut }: La
                 className="btn-download">
                 Download for Chrome
               </a>
-              <button onClick={onSignIn} className="btn-signin-google">
-                Sign in with Google
-              </button>
             </div>
           </div>
         </div>

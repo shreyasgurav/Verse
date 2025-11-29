@@ -64,19 +64,21 @@
 }
 
 /* Buttons */
-.btn-signin {
+.btn-download-header {
   padding: 8px 20px;
   background: #000;
   color: #fff;
   border: none;
-  border-radius: 980px;
+  border-radius: 20px;
   font-size: 14px;
-  font-weight: 400;
+  font-weight: 500;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
   transition: all 0.2s ease;
 }
 
-.btn-signin:hover {
+.btn-download-header:hover {
   opacity: 0.8;
 }
 

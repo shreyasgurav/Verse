@@ -181,15 +181,8 @@ function App() {
     }
   };
 
-  // Always show landing page - button changes based on auth state
-  return (
-    <LandingPage
-      onSignIn={handleGoogleSignIn}
-      isAuthenticated={!!authData}
-      userName={authData?.name}
-      onSignOut={handleSignOut}
-    />
-  );
+  // Always show landing page
+  return <LandingPage />;
 }
 
 export default App;
