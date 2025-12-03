@@ -1773,27 +1773,38 @@ const SidePanel = () => {
             )}
           </div>
           <div className="header-icons">
-            {/* Memory toggle button */}
-            <div className="relative group">
-              <button
-                type="button"
-                onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    handleSendMessage('/summarize_page', 'Summarize page');
-                  }
-                }}
-                className={`header-icon text-white hover:text-white cursor-pointer`}
-                aria-label={'Summarize page'}
-                tabIndex={0}>
-                <span
-                  className="material-symbols-outlined"
-                  style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
-                  segment
-                </span>
-              </button>
-              <span className="instant-tooltip">Summarize page</span>
-            </div>
+            {/* Summarize page button (hidden on internal/special pages) */}
+            {currentTabMeta?.url &&
+              !(
+                currentTabMeta.url.startsWith('chrome://') ||
+                currentTabMeta.url.startsWith('chrome-extension://') ||
+                currentTabMeta.url.startsWith('edge://') ||
+                currentTabMeta.url.startsWith('about:') ||
+                currentTabMeta.url.startsWith('file://') ||
+                currentTabMeta.url.includes('chromewebstore.google.com') ||
+                ['about:blank', 'chrome://new-tab-page', 'chrome://new-tab-page/'].includes(currentTabMeta.url)
+              ) && (
+                <div className="relative group">
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        handleSendMessage('/summarize_page', 'Summarize page');
+                      }
+                    }}
+                    className={`header-icon text-white hover:text-white cursor-pointer`}
+                    aria-label={'Summarize page'}
+                    tabIndex={0}>
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>
+                      segment
+                    </span>
+                  </button>
+                  <span className="instant-tooltip">Summarize page</span>
+                </div>
+              )}
             <button
               type="button"
               onClick={() => chrome.runtime.openOptionsPage()}

@@ -39,9 +39,18 @@ export default function InputSection({
   onReplay,
   currentTabId,
 }: InputProps) {
-  const shouldShowTabChip =
-    !!currentTabMeta?.url &&
-    !['about:blank', 'chrome://new-tab-page', 'chrome://new-tab-page/'].includes(currentTabMeta.url);
+  const url = currentTabMeta?.url || '';
+  const isInternalUrl =
+    url.startsWith('chrome://') ||
+    url.startsWith('chrome-extension://') ||
+    url.startsWith('edge://') ||
+    url.startsWith('about:') ||
+    url.startsWith('file://') ||
+    url.includes('chromewebstore.google.com') ||
+    url === '';
+
+  // Always show chip except for blank/new-tab pages
+  const shouldShowTabChip = !!url && !['about:blank', 'chrome://new-tab-page', 'chrome://new-tab-page/'].includes(url);
 
   // Get feature button component if available
   const FeatureButton = currentTabMeta?.url ? getFeatureButton(currentTabMeta.url) : null;
@@ -61,7 +70,7 @@ export default function InputSection({
               )}
               <span className="tab-chip-title">{currentTabMeta?.title || 'This page'}</span>
             </div>
-            {FeatureButton && currentTabId && currentTabMeta && (
+            {FeatureButton && currentTabId && currentTabMeta && !isInternalUrl && (
               <FeatureButton tabId={currentTabId} tabMeta={currentTabMeta} isDarkMode={isDarkMode} />
             )}
           </div>
