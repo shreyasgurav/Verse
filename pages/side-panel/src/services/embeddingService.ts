@@ -1,6 +1,6 @@
 /**
  * Embedding service for semantic memory search
- * Supports OpenAI embeddings API with TF-IDF fallback
+ * Uses OpenAI embeddings API exclusively with internal API key
  */
 
 import type { ExtractedMemory } from './memoryExtractor';
@@ -10,84 +10,40 @@ export interface MemoryWithEmbedding extends ExtractedMemory {
 }
 
 /**
+ * Internal OpenAI API key for embeddings (from env)
+ * Users don't need to provide their own key
+ */
+const OPENAI_EMBEDDING_KEY = import.meta.env.VITE_OPENAI_EMBEDDING_KEY || '';
+
+/**
  * Generate embedding using OpenAI API
  */
-async function generateOpenAIEmbedding(text: string, apiKey: string): Promise<number[]> {
-  try {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        input: text,
-        model: 'text-embedding-3-small', // 1536 dimensions, $0.02 per 1M tokens
-        encoding_format: 'float',
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.data[0].embedding;
-  } catch (error) {
-    console.error('Failed to generate OpenAI embedding:', error);
-    throw error;
-  }
-}
-
-/**
- * Simple TF-IDF based embedding fallback (when no API key available)
- * Creates a sparse vector representation of text
- */
-function generateTFIDFEmbedding(text: string, vocabulary: string[]): number[] {
-  const words = text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .split(/\s+/)
-    .filter(w => w.length > 2);
-
-  // Term frequency
-  const termFreq = new Map<string, number>();
-  for (const word of words) {
-    termFreq.set(word, (termFreq.get(word) || 0) + 1);
+async function generateOpenAIEmbedding(text: string): Promise<number[]> {
+  if (!OPENAI_EMBEDDING_KEY) {
+    throw new Error('OpenAI embedding API key not configured');
   }
 
-  // Create vector based on vocabulary
-  const vector = new Array(vocabulary.length).fill(0);
-  for (let i = 0; i < vocabulary.length; i++) {
-    const word = vocabulary[i];
-    if (termFreq.has(word)) {
-      vector[i] = termFreq.get(word)! / words.length; // Normalized TF
-    }
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_EMBEDDING_KEY}`,
+    },
+    body: JSON.stringify({
+      input: text,
+      model: 'text-embedding-3-small', // 1536 dimensions, $0.02 per 1M tokens
+      encoding_format: 'float',
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[Embedding] OpenAI API error:', response.status, errorText);
+    throw new Error(`OpenAI API error: ${response.status}`);
   }
 
-  return vector;
-}
-
-/**
- * Build vocabulary from all memories (for TF-IDF fallback)
- */
-function buildVocabulary(memories: ExtractedMemory[]): string[] {
-  const wordSet = new Set<string>();
-
-  for (const memory of memories) {
-    const words = memory.content
-      .toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .split(/\s+/)
-      .filter(w => w.length > 2);
-
-    for (const word of words) {
-      wordSet.add(word);
-    }
-  }
-
-  // Limit vocabulary size to top 500 most common words
-  return Array.from(wordSet).slice(0, 500);
+  const data = await response.json();
+  return data.data[0].embedding;
 }
 
 /**
@@ -113,115 +69,181 @@ export function cosineSimilarity(vec1: number[], vec2: number[]): number {
 }
 
 /**
- * Generate embedding for text using available method
+ * Generate embedding for text using OpenAI
  */
-export async function generateEmbedding(text: string, apiKey?: string): Promise<number[]> {
-  // Try OpenAI API first if key is available
-  if (apiKey && apiKey.trim()) {
-    try {
-      return await generateOpenAIEmbedding(text, apiKey);
-    } catch (error) {
-      console.warn('OpenAI embedding failed, falling back to TF-IDF:', error);
-    }
-  }
-
-  // Fallback: Use simple TF-IDF (requires vocabulary from existing memories)
-  // This will be handled by the caller
-  throw new Error('No embedding method available - need OpenAI API key or vocabulary');
+export async function generateEmbedding(text: string): Promise<number[]> {
+  return await generateOpenAIEmbedding(text);
 }
 
 /**
  * Generate embeddings for all memories that don't have them
+ * Uses internal OpenAI API key - no user key needed
  */
-export async function generateMemoryEmbeddings(
-  memories: MemoryWithEmbedding[],
-  apiKey?: string,
-): Promise<MemoryWithEmbedding[]> {
-  const updated: MemoryWithEmbedding[] = [];
-
-  // If using OpenAI, generate embeddings for memories without them
-  if (apiKey && apiKey.trim()) {
-    for (const memory of memories) {
-      if (!memory.embedding || memory.embedding.length === 0) {
-        try {
-          const embedding = await generateEmbedding(memory.content, apiKey);
-          updated.push({ ...memory, embedding });
-          console.log('Generated embedding for memory:', memory.content.substring(0, 50));
-        } catch (error) {
-          console.error('Failed to generate embedding:', error);
-          updated.push(memory);
-        }
-      } else {
-        updated.push(memory);
-      }
-    }
-    return updated;
+export async function generateMemoryEmbeddings(memories: MemoryWithEmbedding[]): Promise<MemoryWithEmbedding[]> {
+  if (!OPENAI_EMBEDDING_KEY) {
+    console.warn('[Embedding] No API key configured, skipping embedding generation');
+    return memories;
   }
 
-  // Fallback: Use TF-IDF for all memories
-  console.log('Using TF-IDF fallback for embeddings');
-  const vocabulary = buildVocabulary(memories);
+  const updated: MemoryWithEmbedding[] = [];
 
-  return memories.map(memory => {
+  for (const memory of memories) {
     if (!memory.embedding || memory.embedding.length === 0) {
-      const embedding = generateTFIDFEmbedding(memory.content, vocabulary);
-      return { ...memory, embedding };
+      try {
+        const embedding = await generateOpenAIEmbedding(memory.content);
+        updated.push({ ...memory, embedding });
+        console.log('[Embedding] Generated for:', memory.content.substring(0, 50));
+      } catch (error) {
+        console.error('[Embedding] Failed:', error);
+        updated.push(memory);
+      }
+    } else {
+      updated.push(memory);
     }
-    return memory;
-  });
+  }
+
+  return updated;
 }
 
 /**
- * Find relevant memories for a given query using semantic search
+ * Extract keywords from query for fallback matching
+ */
+function extractQueryKeywords(query: string): string[] {
+  const keywords = query
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 2);
+
+  // Common question words to look for specific info
+  const infoKeywords: Record<string, string[]> = {
+    hometown: ['hometown', 'home', 'town', 'city', 'live', 'from', 'location'],
+    name: ['name', 'called', 'who'],
+    email: ['email', 'mail', 'address'],
+    phone: ['phone', 'number', 'call', 'mobile'],
+    pizza: ['pizza', 'food', 'favorite', 'like', 'eat'],
+    location: ['location', 'live', 'stay', 'city', 'place', 'where'],
+    job: ['job', 'work', 'company', 'employment', 'occupation'],
+  };
+
+  const expanded: string[] = [...keywords];
+  for (const [key, synonyms] of Object.entries(infoKeywords)) {
+    if (keywords.some(k => synonyms.includes(k))) {
+      expanded.push(key);
+    }
+  }
+
+  return [...new Set(expanded)];
+}
+
+/**
+ * Calculate keyword overlap score between query and memory
+ */
+function keywordMatchScore(query: string, memoryContent: string): number {
+  const queryWords = new Set(
+    query
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 2),
+  );
+  const memoryWords = new Set(
+    memoryContent
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 2),
+  );
+
+  let matches = 0;
+  for (const word of queryWords) {
+    if (memoryWords.has(word)) {
+      matches++;
+    }
+  }
+
+  return queryWords.size > 0 ? matches / queryWords.size : 0;
+}
+
+/**
+ * Find relevant memories for a given query using semantic search + keyword fallback
+ * Uses internal OpenAI API key - no user key needed
  */
 export async function findRelevantMemories(
   query: string,
   memories: MemoryWithEmbedding[],
-  apiKey?: string,
   topK = 5,
-  minSimilarity = 0.5,
+  minSimilarity = 0.2,
 ): Promise<Array<{ memory: MemoryWithEmbedding; similarity: number }>> {
   if (memories.length === 0) {
+    console.log('[MemorySearch] No memories to search');
     return [];
   }
 
-  // Generate query embedding
-  let queryEmbedding: number[];
-
-  if (apiKey && apiKey.trim()) {
-    try {
-      queryEmbedding = await generateEmbedding(query, apiKey);
-    } catch (error) {
-      console.warn('Failed to generate query embedding, using TF-IDF fallback');
-      const vocabulary = buildVocabulary(memories);
-      queryEmbedding = generateTFIDFEmbedding(query, vocabulary);
-    }
-  } else {
-    // Use TF-IDF fallback
-    const vocabulary = buildVocabulary(memories);
-    queryEmbedding = generateTFIDFEmbedding(query, vocabulary);
-  }
-
-  // Calculate similarities
+  console.log(`[MemorySearch] Searching ${memories.length} memories for: "${query}"`);
   const results: Array<{ memory: MemoryWithEmbedding; similarity: number }> = [];
 
-  for (const memory of memories) {
-    if (!memory.embedding || memory.embedding.length === 0) {
-      continue;
-    }
+  // Strategy 1: Keyword matching (always works as fallback)
+  const queryKeywords = extractQueryKeywords(query);
+  console.log(`[MemorySearch] Query keywords: ${queryKeywords.join(', ')}`);
 
+  for (const memory of memories) {
+    const keywordScore = keywordMatchScore(query, memory.content);
+    if (keywordScore > 0.3) {
+      results.push({ memory, similarity: keywordScore });
+      console.log(`[MemorySearch] Keyword match (${keywordScore.toFixed(2)}): ${memory.content.substring(0, 50)}...`);
+    }
+  }
+
+  // Strategy 2: Embedding-based semantic search using OpenAI
+  if (OPENAI_EMBEDDING_KEY) {
     try {
-      const similarity = cosineSimilarity(queryEmbedding, memory.embedding);
-      if (similarity >= minSimilarity) {
-        results.push({ memory, similarity });
+      const queryEmbedding = await generateOpenAIEmbedding(query);
+      console.log('[MemorySearch] Generated OpenAI query embedding');
+
+      // Calculate embedding similarities
+      for (const memory of memories) {
+        if (!memory.embedding || memory.embedding.length === 0) {
+          continue;
+        }
+
+        // Check for dimension mismatch
+        if (queryEmbedding.length !== memory.embedding.length) {
+          console.log(
+            `[MemorySearch] Dimension mismatch: query=${queryEmbedding.length}, memory=${memory.embedding.length}`,
+          );
+          continue;
+        }
+
+        try {
+          const similarity = cosineSimilarity(queryEmbedding, memory.embedding);
+          const existing = results.find(r => r.memory.content === memory.content);
+
+          if (existing) {
+            // Boost existing keyword match with embedding score
+            existing.similarity = Math.max(existing.similarity, similarity);
+          } else if (similarity >= minSimilarity) {
+            results.push({ memory, similarity });
+            console.log(
+              `[MemorySearch] Embedding match (${similarity.toFixed(2)}): ${memory.content.substring(0, 50)}...`,
+            );
+          }
+        } catch (error) {
+          console.error('[MemorySearch] Error calculating similarity:', error);
+        }
       }
     } catch (error) {
-      console.error('Error calculating similarity:', error);
+      console.warn('[MemorySearch] OpenAI embedding failed, using keyword matching only:', error);
     }
+  } else {
+    console.log('[MemorySearch] No API key, using keyword matching only');
   }
 
   // Sort by similarity (highest first) and return top K
-  return results.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
+  const topResults = results.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
+  console.log(`[MemorySearch] Returning ${topResults.length} relevant memories`);
+
+  return topResults;
 }
 
 /**
@@ -237,7 +259,8 @@ export function formatMemoriesAsContext(
   const lines = ['[Relevant memories from previous conversations:]'];
 
   for (const { memory, similarity } of relevantMemories) {
-    const categoryEmoji = {
+    const categoryEmoji: Record<string, string> = {
+      personal_info: '👤',
       preference: '⚙️',
       fact: 'ℹ️',
       goal: '🎯',

@@ -212,20 +212,8 @@ const SidePanel = () => {
           updatedMemories = updatedMemories.slice(0, MAX);
         }
 
-        // Get API key for embeddings
-        let apiKey = embeddingApiKey;
-        if (!apiKey) {
-          // Try to get from providers if not set yet
-          const allProviders = await llmProviderStore.getAllProviders();
-          const openAIProvider = Object.values(allProviders).find(p => p.type === ProviderTypeEnum.OpenAI);
-          if (openAIProvider?.apiKey) {
-            apiKey = openAIProvider.apiKey;
-            console.log('🔑 Using OpenAI API key from providers for embeddings');
-          }
-        }
-
-        // Generate embeddings for new memories
-        const memoriesWithEmbeddings = await generateMemoryEmbeddings(updatedMemories, apiKey);
+        // Generate embeddings for new memories (uses internal API key)
+        const memoriesWithEmbeddings = await generateMemoryEmbeddings(updatedMemories);
 
         // Save to storage
         await chrome.storage.local.set({ verse_memories: memoriesWithEmbeddings });
@@ -1202,9 +1190,8 @@ const SidePanel = () => {
           const relevantMemories = await findRelevantMemories(
             `/replay ${historySessionId}`,
             existingMemories,
-            embeddingApiKey,
             5, // Top 5 most relevant
-            0.5, // 50% minimum similarity
+            0.2, // 20% minimum similarity
           );
 
           if (relevantMemories.length > 0) {
@@ -1392,23 +1379,11 @@ const SidePanel = () => {
       const existingMemories: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
 
       if (existingMemories.length > 0) {
-        // Get API key for embeddings
-        let apiKey = embeddingApiKey;
-        if (!apiKey) {
-          // Try to get from providers if not set yet
-          const allProviders = await llmProviderStore.getAllProviders();
-          const openAIProvider = Object.values(allProviders).find(p => p.type === ProviderTypeEnum.OpenAI);
-          if (openAIProvider?.apiKey) {
-            apiKey = openAIProvider.apiKey;
-          }
-        }
-
         const relevantMemories = await findRelevantMemories(
           trimmedText,
           existingMemories,
-          apiKey,
           5, // Top 5 most relevant
-          0.5, // 50% minimum similarity
+          0.2, // 20% minimum similarity
         );
 
         if (relevantMemories.length > 0) {

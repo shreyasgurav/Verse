@@ -45,10 +45,9 @@ async function handleFillUniversalFormField(message: any, sendResponse: (respons
     // Create a chat model
     const chatModel = createChatModel(providerConfig, navigatorModel);
 
-    // Retrieve relevant memories for this field
-    const openAIKey = providerConfig.type === ProviderTypeEnum.OpenAI ? providerConfig.apiKey : undefined;
+    // Retrieve relevant memories for this field (uses internal API key)
     logger.info('Searching memories for field:', field.context);
-    const relevantMemories = await retrieveRelevantMemories(field.context, openAIKey, 3, 0.3);
+    const relevantMemories = await retrieveRelevantMemories(field.context, 3, 0.2);
     const memoryContext = formatMemoriesForPrompt(relevantMemories);
 
     if (relevantMemories.length > 0) {

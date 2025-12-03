@@ -52,10 +52,9 @@ async function handleFillFormQuestion(message: any, sendResponse: (response?: an
     // Create a chat model
     const chatModel = createChatModel(providerConfig, navigatorModel);
 
-    // Retrieve relevant memories for this question
-    const openAIKey = providerConfig.type === ProviderTypeEnum.OpenAI ? providerConfig.apiKey : undefined;
+    // Retrieve relevant memories for this question (uses internal API key)
     logger.info('Searching memories for question:', question.question);
-    const relevantMemories = await retrieveRelevantMemories(question.question, openAIKey, 3, 0.3);
+    const relevantMemories = await retrieveRelevantMemories(question.question, 3, 0.2);
     const memoryContext = formatMemoriesForPrompt(relevantMemories);
 
     if (relevantMemories.length > 0) {

@@ -109,16 +109,8 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
 
       const updated = [...memoriesToAdd, ...existing].slice(0, 200);
 
-      let apiKey = embeddingApiKey;
-      if (!apiKey) {
-        const allProviders = await llmProviderStore.getAllProviders();
-        const openAIProvider = Object.values(allProviders).find(p => p.type === ProviderTypeEnum.OpenAI);
-        if (openAIProvider?.apiKey) {
-          apiKey = openAIProvider.apiKey;
-        }
-      }
-
-      const withEmbeddings = await generateMemoryEmbeddings(updated, apiKey);
+      // Generate embeddings using internal API key
+      const withEmbeddings = await generateMemoryEmbeddings(updated);
       await chrome.storage.local.set({ verse_memories: withEmbeddings });
       setMemories(withEmbeddings.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
       setNewMemoryText('');
