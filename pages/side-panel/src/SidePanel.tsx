@@ -805,7 +805,12 @@ const SidePanel = () => {
           taskId: data.taskId,
         };
 
-        setMessages(prev => [...prev, progressMsg]);
+        // Avoid duplicate progress bubbles if we already showed a generic typing indicator
+        setMessages(prev => {
+          const alreadyHasProgress = prev.some(m => m.messageType === 'progress');
+          if (alreadyHasProgress) return prev;
+          return [...prev, progressMsg];
+        });
         return;
       }
 
@@ -1372,7 +1377,49 @@ const SidePanel = () => {
     // Don't await - let it run in background
     savePromptToLocal(memoryText).catch(err => console.error('Memory save error:', err));
 
-    // Retrieve relevant memories for context
+    // Prepare UI IMMEDIATELY: create session (if needed), show user message, show typing indicator
+    try {
+      // Create a new chat session for this task if not in follow-up mode
+      if (!isFollowUpMode) {
+        if (!tabChatHistoryStore) {
+          throw new Error('Chat history store not initialized');
+        }
+        const titleText = displayText || text;
+        const newSession = await tabChatHistoryStore.createSession(
+          titleText.substring(0, 50) + (titleText.length > 50 ? '...' : ''),
+        );
+        const sessionId = newSession.id;
+        setCurrentSessionId(sessionId);
+        sessionIdRef.current = sessionId;
+      }
+
+      // Disable input and show stop button right away
+      setInputEnabled(false);
+      setShowStopButton(true);
+
+      // Show the user's message immediately
+      appendMessage(
+        {
+          actor: Actors.USER,
+          content: trimmedText,
+          timestamp: Date.now(),
+        },
+        sessionIdRef.current,
+      );
+
+      // Show a typing indicator immediately (progress message)
+      appendMessage({
+        actor: Actors.SYSTEM,
+        content: progressMessage,
+        timestamp: Date.now(),
+        messageType: 'progress',
+        taskId: sessionIdRef.current || undefined,
+      });
+    } catch (e) {
+      console.error('Failed to prepare UI for send:', e);
+    }
+
+    // Retrieve relevant memories for context (can take time, UI already updated)
     let promptWithContext = trimmedText;
     try {
       const res = await chrome.storage.local.get(['verse_memories']);
@@ -1425,9 +1472,6 @@ const SidePanel = () => {
         }
       }
 
-      setInputEnabled(false);
-      setShowStopButton(true);
-
       // Clear any existing timeout
       if (taskTimeoutRef.current) {
         clearTimeout(taskTimeoutRef.current);
@@ -1449,32 +1493,7 @@ const SidePanel = () => {
         5 * 60 * 1000,
       ); // 5 minutes
 
-      // Create a new chat session for this task if not in follow-up mode
-      if (!isFollowUpMode) {
-        if (!tabChatHistoryStore) {
-          throw new Error('Chat history store not initialized');
-        }
-        // Use display text for session title if available, otherwise use full text
-        const titleText = displayText || text;
-        const newSession = await tabChatHistoryStore.createSession(
-          titleText.substring(0, 50) + (titleText.length > 50 ? '...' : ''),
-        );
-        console.log('newSession', newSession);
-
-        // Store the session ID in both state and ref
-        const sessionId = newSession.id;
-        setCurrentSessionId(sessionId);
-        sessionIdRef.current = sessionId;
-      }
-
-      const userMessage = {
-        actor: Actors.USER,
-        content: trimmedText, // Display original text to user
-        timestamp: Date.now(),
-      };
-
-      // Pass the sessionId directly to appendMessage
-      appendMessage(userMessage, sessionIdRef.current);
+      // Session and UI already prepared above; don't append user message again
 
       // Setup connection if not exists
       if (!portRef.current) {
