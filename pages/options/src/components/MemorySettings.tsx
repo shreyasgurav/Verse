@@ -16,6 +16,7 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
   const [newMemoryText, setNewMemoryText] = useState('');
   const [embeddingApiKey, setEmbeddingApiKey] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  const [hasApiKeyConfigured, setHasApiKeyConfigured] = useState<boolean>(false);
 
   // Load memories
   useEffect(() => {
@@ -29,6 +30,21 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
       }
     };
     loadMemories();
+  }, []);
+
+  // Check if any provider has an API key configured to allow adding memories
+  useEffect(() => {
+    const checkProviders = async () => {
+      try {
+        const allProviders = await llmProviderStore.getAllProviders();
+        const hasAny = Object.values(allProviders).some(cfg => Boolean(cfg?.apiKey?.trim()));
+        setHasApiKeyConfigured(hasAny);
+      } catch (e) {
+        console.warn('Unable to check provider configuration', e);
+        setHasApiKeyConfigured(false);
+      }
+    };
+    checkProviders();
   }, []);
 
   // Load embedding API key
@@ -95,7 +111,7 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
     <section className="flex flex-col h-full w-full">
       {/* Header - Fixed at top */}
       <div className="flex-shrink-0 w-full">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2">
           <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>Memories</h2>
           <button
             onClick={() => setShowAddMemory(true)}
@@ -103,11 +119,18 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
               isDarkMode
                 ? 'text-gray-300 hover:bg-white/10 hover:text-white'
                 : 'text-gray-600 hover:bg-black/5 hover:text-black'
-            }`}>
+            } ${!hasApiKeyConfigured ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={!hasApiKeyConfigured}
+            title={hasApiKeyConfigured ? 'Add a new memory' : 'Configure an API key first in Models tab'}>
             <FiPlus size={16} />
             <span>Add Memory</span>
           </button>
         </div>
+        {!hasApiKeyConfigured && (
+          <p className={`mb-4 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Configure a provider API key in the Models tab to add memories.
+          </p>
+        )}
       </div>
 
       {/* Memories List - Scrollable */}

@@ -190,7 +190,6 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
     loadAgentModels();
   }, []);
 
-
   // Auto-focus the input field when a new provider is added
   useEffect(() => {
     // Only focus if we have a newly added provider reference
@@ -718,7 +717,6 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
     }
   };
 
-
   const renderModelSelect = (agentName: AgentNameEnum) => (
     <div className={`p-0`}>
       <h3 className={`mb-2 text-lg font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -743,11 +741,13 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
               onChange={e => handleModelChange(agentName, e.target.value)}
               disabled={!singleProvider || !singleApiKey || getFilteredModels().length === 0}
               className={`w-full appearance-none pr-8 rounded-lg border border-white/40 bg-transparent px-3 py-2 text-sm ${
-                !singleProvider || !singleApiKey || getFilteredModels().length === 0 
-                  ? 'opacity-50 cursor-not-allowed' 
+                !singleProvider || !singleApiKey || getFilteredModels().length === 0
+                  ? 'opacity-50 cursor-not-allowed'
                   : ''
               } ${isDarkMode ? 'text-gray-200' : 'text-gray-200'} focus:outline-none focus:ring-0 focus:border-white/40`}>
-              <option value="">{!singleProvider || !singleApiKey ? 'Configure provider first' : t('options_models_chooseModel')}</option>
+              <option value="">
+                {!singleProvider || !singleApiKey ? 'Configure provider first' : t('options_models_chooseModel')}
+              </option>
               {getFilteredModels().map(({ provider, providerName, model }) => {
                 const value = `${provider}>${model}`;
                 return (
@@ -762,7 +762,11 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
               viewBox="0 0 20 20"
               fill="currentColor"
               aria-hidden="true">
-              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.108l3.71-3.877a.75.75 0 011.08 1.04l-4.24 4.43a.75.75 0 01-1.08 0l-4.24-4.43a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              <path
+                fillRule="evenodd"
+                d="M5.23 7.21a.75.75 0 011.06.02L10 11.108l3.71-3.877a.75.75 0 011.08 1.04l-4.24 4.43a.75.75 0 01-1.08 0l-4.24-4.43a.75.75 0 01.02-1.06z"
+                clipRule="evenodd"
+              />
             </svg>
           </div>
         </div>
@@ -816,46 +820,46 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
         {/* Top P Slider - only visible when model is selected */}
         {selectedModels[agentName] && (
           <div className="flex items-center">
-              <label
-                htmlFor={`${agentName}-topP`}
-                className={`w-24 text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {t('options_models_labels_topP')}
-              </label>
-              <div className="flex flex-1 items-center space-x-2">
+            <label
+              htmlFor={`${agentName}-topP`}
+              className={`w-24 text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              {t('options_models_labels_topP')}
+            </label>
+            <div className="flex flex-1 items-center space-x-2">
+              <input
+                id={`${agentName}-topP`}
+                type="range"
+                min="0"
+                max="1"
+                step="0.001"
+                value={modelParameters[agentName].topP}
+                onChange={e => handleParameterChange(agentName, 'topP', Number.parseFloat(e.target.value))}
+                style={{
+                  background: `linear-gradient(to right, ${isDarkMode ? '#3b82f6' : '#60a5fa'} 0%, ${isDarkMode ? '#3b82f6' : '#60a5fa'} ${modelParameters[agentName].topP * 100}%, ${isDarkMode ? '#475569' : '#cbd5e1'} ${modelParameters[agentName].topP * 100}%, ${isDarkMode ? '#475569' : '#cbd5e1'} 100%)`,
+                }}
+                className={`flex-1 ${isDarkMode ? 'accent-blue-500' : 'accent-blue-400'} h-1 appearance-none rounded-full`}
+              />
+              <div className="flex items-center space-x-2">
+                <span className={`w-12 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  {modelParameters[agentName].topP.toFixed(3)}
+                </span>
                 <input
-                  id={`${agentName}-topP`}
-                  type="range"
+                  type="number"
                   min="0"
                   max="1"
                   step="0.001"
                   value={modelParameters[agentName].topP}
-                  onChange={e => handleParameterChange(agentName, 'topP', Number.parseFloat(e.target.value))}
-                  style={{
-                    background: `linear-gradient(to right, ${isDarkMode ? '#3b82f6' : '#60a5fa'} 0%, ${isDarkMode ? '#3b82f6' : '#60a5fa'} ${modelParameters[agentName].topP * 100}%, ${isDarkMode ? '#475569' : '#cbd5e1'} ${modelParameters[agentName].topP * 100}%, ${isDarkMode ? '#475569' : '#cbd5e1'} 100%)`,
+                  onChange={e => {
+                    const value = Number.parseFloat(e.target.value);
+                    if (!Number.isNaN(value) && value >= 0 && value <= 1) {
+                      handleParameterChange(agentName, 'topP', value);
+                    }
                   }}
-                  className={`flex-1 ${isDarkMode ? 'accent-blue-500' : 'accent-blue-400'} h-1 appearance-none rounded-full`}
+                  className={`w-20 rounded-lg border border-white/40 bg-transparent px-2 py-1 text-sm text-center ${isDarkMode ? 'text-gray-200' : 'text-gray-800'} focus:outline-none focus:ring-0 focus:border-white/40`}
+                  aria-label={`${agentName} top P number input`}
                 />
-                <div className="flex items-center space-x-2">
-                  <span className={`w-12 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                    {modelParameters[agentName].topP.toFixed(3)}
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.001"
-                    value={modelParameters[agentName].topP}
-                    onChange={e => {
-                      const value = Number.parseFloat(e.target.value);
-                      if (!Number.isNaN(value) && value >= 0 && value <= 1) {
-                        handleParameterChange(agentName, 'topP', value);
-                      }
-                    }}
-                    className={`w-20 rounded-lg border border-white/40 bg-transparent px-2 py-1 text-sm text-center ${isDarkMode ? 'text-gray-200' : 'text-gray-800'} focus:outline-none focus:ring-0 focus:border-white/40`}
-                    aria-label={`${agentName} top P number input`}
-                  />
-                </div>
               </div>
+            </div>
           </div>
         )}
 
@@ -869,24 +873,36 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
             </label>
             <div className="flex flex-1 items-center space-x-2">
               <div className="relative flex-1">
-              <select
-                id={`${agentName}-reasoning-effort`}
-                value={reasoningEffort[agentName] || (agentName === AgentNameEnum.Planner ? 'low' : 'minimal')}
-                onChange={e =>
-                  handleReasoningEffortChange(agentName, e.target.value as 'minimal' | 'low' | 'medium' | 'high')
-                }
+                <select
+                  id={`${agentName}-reasoning-effort`}
+                  value={reasoningEffort[agentName] || (agentName === AgentNameEnum.Planner ? 'low' : 'minimal')}
+                  onChange={e =>
+                    handleReasoningEffortChange(agentName, e.target.value as 'minimal' | 'low' | 'medium' | 'high')
+                  }
                   className={`w-full appearance-none pr-8 rounded-lg border border-white/40 bg-transparent px-3 py-2 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-200'} focus:outline-none focus:ring-0 focus:border-white/40`}>
-                  <option value="minimal" className="bg-[#343434] text-gray-200">Minimal</option>
-                  <option value="low" className="bg-[#343434] text-gray-200">Low</option>
-                  <option value="medium" className="bg-[#343434] text-gray-200">Medium</option>
-                  <option value="high" className="bg-[#343434] text-gray-200">High</option>
-              </select>
+                  <option value="minimal" className="bg-[#343434] text-gray-200">
+                    Minimal
+                  </option>
+                  <option value="low" className="bg-[#343434] text-gray-200">
+                    Low
+                  </option>
+                  <option value="medium" className="bg-[#343434] text-gray-200">
+                    Medium
+                  </option>
+                  <option value="high" className="bg-[#343434] text-gray-200">
+                    High
+                  </option>
+                </select>
                 <svg
                   className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 text-gray-300"
                   viewBox="0 0 20 20"
                   fill="currentColor"
                   aria-hidden="true">
-                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.108l3.71-3.877a.75.75 0 011.08 1.04l-4.24 4.43a.75.75 0 01-1.08 0l-4.24-4.43a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.108l3.71-3.877a.75.75 0 011.08 1.04l-4.24 4.43a.75.75 0 01-1.08 0l-4.24-4.43a.75.75 0 01.02-1.06z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </div>
             </div>
@@ -1164,20 +1180,18 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
         input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
       `}</style>
       {/* LLM Providers Section */}
-      <div
-        className={`rounded-2xl p-6 text-left shadow-sm w-full`}
-        style={{ backgroundColor: '#343434' }}>
+      <div className={`rounded-2xl p-6 text-left shadow-sm w-full`} style={{ backgroundColor: '#343434' }}>
         <div className="space-y-6">
-          {/* Single-row provider → model → API key → Save */}
-          <div className="flex items-end gap-3">
+          {/* Single-row provider → API key → Save */}
+          <div className="flex items-end gap-3 w-full">
             {/* Provider */}
-            <div className="flex flex-col">
+            <div className="flex flex-col flex-shrink-0" style={{ width: '180px' }}>
               <label className={`mb-1 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>LLM Provider</label>
               <div className="relative">
                 <select
                   value={singleProvider}
                   onChange={e => setSingleProvider(e.target.value)}
-                  className={`w-48 appearance-none pr-8 rounded-lg border border-white/40 bg-transparent px-3 py-2 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-200'} focus:outline-none focus:ring-0 focus:border-white/40`}>
+                  className={`w-full appearance-none pr-8 rounded-lg border border-white/40 bg-transparent px-3 py-2 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-200'} focus:outline-none focus:ring-0 focus:border-white/40`}>
                   <option value="">Select Provider</option>
                   {Object.keys(llmProviderModelNames).map(pid => (
                     <option key={pid} value={pid} className="bg-[#343434] text-gray-200">
@@ -1190,20 +1204,26 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                   viewBox="0 0 20 20"
                   fill="currentColor"
                   aria-hidden="true">
-                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.108l3.71-3.877a.75.75 0 011.08 1.04l-4.24 4.43a.75.75 0 01-1.08 0l-4.24-4.43a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.108l3.71-3.877a.75.75 0 011.08 1.04l-4.24 4.43a.75.75 0 01-1.08 0l-4.24-4.43a.75.75 0 01.02-1.06z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </div>
             </div>
 
-            {/* API Key with show/hide toggle */}
-            <div className="flex flex-col">
-              <label className={`mb-1 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{t('options_models_providers_apiKey')}*</label>
+            {/* API Key with show/hide toggle - flex-1 to fill remaining space */}
+            <div className="flex flex-col flex-1 min-w-0">
+              <label className={`mb-1 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                {t('options_models_providers_apiKey')}*
+              </label>
               <div className="relative">
                 <input
                   type={showApiKey ? 'text' : 'password'}
                   value={singleApiKey}
                   onChange={e => setSingleApiKey(e.target.value)}
-                  className={`w-[600px] rounded-lg border border-white/40 bg-transparent px-3 py-2 pr-10 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-200'} focus:outline-none focus:ring-0 focus:border-white/40`}
+                  className={`w-full rounded-lg border border-white/40 bg-transparent px-3 py-2 pr-10 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-200'} focus:outline-none focus:ring-0 focus:border-white/40`}
                   placeholder={t('options_models_providers_apiKey_placeholder_required')}
                 />
                 <button
@@ -1213,12 +1233,27 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                   aria-label={showApiKey ? 'Hide API key' : 'Show API key'}>
                   {showApiKey ? (
                     <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+                      />
                     </svg>
                   ) : (
                     <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                      />
                     </svg>
                   )}
                 </button>
@@ -1226,7 +1261,7 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
             </div>
 
             {/* Save */}
-                      <div className="flex flex-col">
+            <div className="flex flex-col flex-shrink-0">
               <label className="mb-1 text-sm opacity-0">Save</label>
               <Button
                 onClick={async () => {
@@ -1237,12 +1272,15 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                   try {
                     // Save provider without deleting others
                     const existing = providers[singleProvider];
-                    const cfg = (existing ? { ...existing } : getDefaultProviderConfig(singleProvider)) as ProviderConfig;
+                    const cfg = (
+                      existing ? { ...existing } : getDefaultProviderConfig(singleProvider)
+                    ) as ProviderConfig;
                     cfg.apiKey = singleApiKey;
                     if (cfg.type !== ProviderTypeEnum.AzureOpenAI) {
-                      cfg.modelNames = cfg.modelNames && cfg.modelNames.length > 0
-                        ? cfg.modelNames
-                        : (llmProviderModelNames[singleProvider as keyof typeof llmProviderModelNames] || []);
+                      cfg.modelNames =
+                        cfg.modelNames && cfg.modelNames.length > 0
+                          ? cfg.modelNames
+                          : llmProviderModelNames[singleProvider as keyof typeof llmProviderModelNames] || [];
                     }
                     await llmProviderStore.setProvider(singleProvider, cfg as ProviderConfig);
 
@@ -1255,31 +1293,32 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
                     setProviders(all);
                     setProvidersFromStorage(new Set(Object.keys(all)));
                     setModifiedProviders(new Set());
-                    
+
                     // Refresh available models
                     const models = await getAvailableModelsCallback();
                     setAvailableModels(models);
-                    
+
                     alert('Provider configuration saved successfully!');
                   } catch (e) {
                     console.error(e);
                     alert('Failed to save configuration');
                   }
                 }}
-                disabled={!singleProvider || !singleApiKey || 
-                  (singleProvider === originalProvider && singleApiKey === originalApiKey)}
+                disabled={
+                  !singleProvider ||
+                  !singleApiKey ||
+                  (singleProvider === originalProvider && singleApiKey === originalApiKey)
+                }
                 className={`rounded-lg px-4 py-2 text-sm !bg-[#343434] text-white hover:opacity-90 border border-white/20 disabled:opacity-50 disabled:cursor-not-allowed`}>
                 Save
-            </Button>
-                </div>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Agent Models Section */}
-      <div
-        className={`rounded-2xl p-6 text-left shadow-sm w-full`}
-        style={{ backgroundColor: '#343434' }}>
+      <div className={`rounded-2xl p-6 text-left shadow-sm w-full`} style={{ backgroundColor: '#343434' }}>
         <h2 className={`mb-4 text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
           Configure
         </h2>
@@ -1289,7 +1328,6 @@ export const ModelSettings = ({ isDarkMode = false }: ModelSettingsProps) => {
           ))}
         </div>
       </div>
-
     </section>
   );
 };
