@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { llmProviderStore, ProviderTypeEnum } from '@extension/storage';
 import { FiPlus, FiTrash2 } from 'react-icons/fi';
 import type { MemoryWithEmbedding } from '../../../side-panel/src/services/embeddingService';
 import { generateMemoryEmbeddings } from '../../../side-panel/src/services/embeddingService';
-import { extractMemoriesFromPrompt, type ExtractedMemory } from '../../../side-panel/src/services/memoryExtractor';
+import { extractMemoriesFromPrompt } from '../../../side-panel/src/services/memoryExtractor';
 
 interface MemorySettingsProps {
   isDarkMode?: boolean;
@@ -14,6 +15,7 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
   const [showAddMemory, setShowAddMemory] = useState(false);
   const [newMemoryText, setNewMemoryText] = useState('');
   const [embeddingApiKey, setEmbeddingApiKey] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load memories
   useEffect(() => {
@@ -57,57 +59,24 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
     const text = newMemoryText.trim();
     if (!text) return;
     try {
+      setIsSaving(true);
       const res = await chrome.storage.local.get(['verse_memories']);
       const existing: MemoryWithEmbedding[] = Array.isArray(res.verse_memories) ? res.verse_memories : [];
 
+      // Extract memories from the text (splits paragraphs into separate memories)
       const extractionResult = await extractMemoriesFromPrompt(text, existing);
-      let memoriesToAdd: ExtractedMemory[] = [];
 
-      if (extractionResult.shouldSave && extractionResult.memories.length > 0) {
-        memoriesToAdd = extractionResult.memories;
-      } else {
-        const lowerText = text.toLowerCase();
-        let subcategory: 'name' | 'email' | 'phone' | 'location' | 'school' | 'company' | undefined;
-        let category: 'personal_info' | 'preference' | 'fact' | 'skill' | 'context' | 'goal' = 'fact';
-
-        if (lowerText.includes('name') || /my name is|i am|i'm [A-Z]/.test(text)) {
-          subcategory = 'name';
-          category = 'personal_info';
-        } else if (lowerText.includes('@') || lowerText.includes('email')) {
-          subcategory = 'email';
-          category = 'personal_info';
-        } else if (lowerText.includes('phone') || lowerText.includes('mobile') || lowerText.includes('cell')) {
-          subcategory = 'phone';
-          category = 'personal_info';
-        } else if (
-          lowerText.includes('college') ||
-          lowerText.includes('university') ||
-          lowerText.includes('school') ||
-          lowerText.includes('study')
-        ) {
-          subcategory = 'school';
-          category = 'fact';
-        } else if (lowerText.includes('work') || lowerText.includes('company') || lowerText.includes('employer')) {
-          subcategory = 'company';
-          category = 'fact';
-        } else if (lowerText.includes('live') || lowerText.includes('city') || lowerText.includes('location')) {
-          subcategory = 'location';
-          category = 'personal_info';
-        }
-
-        memoriesToAdd = [
-          {
-            content: text,
-            category,
-            subcategory,
-            importance: 'high',
-            confidence: 'high',
-            timestamp: Date.now(),
-          },
-        ];
+      if (!extractionResult.shouldSave || extractionResult.memories.length === 0) {
+        console.log('No memories extracted from input');
+        alert(
+          'Could not extract any memories. Try using phrases like "My name is...", "I live in...", "I work at...", etc.',
+        );
+        setIsSaving(false);
+        return;
       }
 
-      const updated = [...memoriesToAdd, ...existing].slice(0, 200);
+      console.log(`Extracted ${extractionResult.memories.length} memories from input`);
+      const updated = [...extractionResult.memories, ...existing].slice(0, 200);
 
       // Generate embeddings using internal API key
       const withEmbeddings = await generateMemoryEmbeddings(updated);
@@ -117,58 +86,69 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
       setShowAddMemory(false);
     } catch (e) {
       console.error('Failed to add manual memory', e);
+    } finally {
+      setIsSaving(false);
     }
   }, [newMemoryText, embeddingApiKey]);
 
   return (
-    <section className="space-y-6">
-      {/* Memories Section */}
-      <div className="rounded-2xl p-6 text-left shadow-sm w-full" style={{ backgroundColor: '#343434' }}>
+    <section className="flex flex-col h-full w-full">
+      {/* Header - Fixed at top */}
+      <div className="flex-shrink-0 w-full">
         <div className="flex items-center justify-between mb-4">
-          <h2 className={`text-left text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-            Memories
-          </h2>
+          <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>Memories</h2>
           <button
             onClick={() => setShowAddMemory(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white border border-white/40 hover:bg-white/5 transition-colors">
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              isDarkMode
+                ? 'text-gray-300 hover:bg-white/10 hover:text-white'
+                : 'text-gray-600 hover:bg-black/5 hover:text-black'
+            }`}>
             <FiPlus size={16} />
-            <span className="text-sm">Add Memory</span>
+            <span>Add Memory</span>
           </button>
         </div>
+      </div>
 
+      {/* Memories List - Scrollable */}
+      <div className="flex-1 overflow-hidden">
         {memories.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">No memories saved yet. Click "Add Memory" to create one.</div>
+          <div className={`text-center py-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+            No memories saved yet. Click "Add Memory" to create one.
+          </div>
         ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+          <div className="space-y-1 text-left h-full overflow-y-auto pr-1">
             {memories.map((m, idx) => (
-              <div key={idx} className="p-4 rounded-lg border border-white/40 hover:border-white/60 transition-colors">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <p className="text-sm text-white whitespace-pre-wrap break-words">{m.content}</p>
-                    {m.subcategory && (
-                      <span className="inline-block mt-2 px-2 py-1 text-xs rounded border border-white/40 text-gray-300">
-                        {m.subcategory}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => deleteLocalMemory(m.timestamp)}
-                    className="flex-shrink-0 p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
-                    aria-label="Delete memory"
-                    title="Delete">
-                    <FiTrash2 size={16} />
-                  </button>
-                </div>
+              <div
+                key={idx}
+                className={`group flex items-start justify-between gap-3 p-2 rounded-lg transition-colors w-full ${
+                  isDarkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'
+                }`}>
+                <p
+                  className={`text-sm whitespace-pre-wrap break-words flex-1 text-left ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  {m.content}
+                </p>
+                <button
+                  onClick={() => deleteLocalMemory(m.timestamp)}
+                  className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1.5 text-red-400 hover:text-red-300 rounded transition-all"
+                  aria-label="Delete memory"
+                  title="Delete">
+                  <FiTrash2 size={14} />
+                </button>
               </div>
             ))}
           </div>
         )}
+      </div>
 
-        {/* Add Memory Modal */}
-        {showAddMemory && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="w-full max-w-lg rounded-lg p-6 shadow-2xl" style={{ backgroundColor: '#2b2b2b' }}>
-              <h3 className="text-lg font-semibold text-white mb-4">Add New Memory</h3>
+      {/* Add Memory Modal */}
+      {showAddMemory &&
+        createPortal(
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 backdrop-blur-[2px]">
+            <div className="w-full max-w-lg rounded-3xl p-6 shadow-2xl" style={{ backgroundColor: '#2b2b2b' }}>
+              <h3 className="text-lg font-semibold text-white mb-4 text-left">Add New Memory</h3>
               <textarea
                 value={newMemoryText}
                 onChange={e => setNewMemoryText(e.target.value)}
@@ -187,15 +167,19 @@ export const MemorySettings = ({ isDarkMode = false }: MemorySettingsProps) => {
                 </button>
                 <button
                   onClick={addManualMemory}
-                  disabled={!newMemoryText.trim()}
-                  className="px-4 py-2 text-sm rounded-lg bg-transparent border border-white/40 text-white hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                  Save Memory
+                  disabled={!newMemoryText.trim() || isSaving}
+                  aria-busy={isSaving}
+                  className="px-4 py-2 text-sm rounded-lg bg-transparent border border-white/40 text-white hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2">
+                  {isSaving && (
+                    <span className="inline-block w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                  )}
+                  {isSaving ? 'Saving…' : 'Save Memory'}
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
-      </div>
     </section>
   );
 };
