@@ -1,11 +1,25 @@
 /**
  * Google Forms Fill Button Component
+ *
+ * This component triggers form filling via the SidePanel's command system
+ * to ensure proper chat UI updates (user message, progress dots, completion message).
  */
 
 import { useState, useEffect } from 'react';
 import type { FeatureButtonProps } from '../types';
 
-export default function FormFillButton({ tabId, tabMeta, isDarkMode }: FeatureButtonProps) {
+interface FormFillButtonExtendedProps extends FeatureButtonProps {
+  onFillForm?: () => void;
+  onStopFillForm?: () => void;
+}
+
+export default function FormFillButton({
+  tabId,
+  tabMeta,
+  isDarkMode,
+  onFillForm,
+  onStopFillForm,
+}: FormFillButtonExtendedProps) {
   const [isFillingForm, setIsFillingForm] = useState(false);
 
   // Listen for messages from content script about form filling state
@@ -13,7 +27,11 @@ export default function FormFillButton({ tabId, tabMeta, isDarkMode }: FeatureBu
     const messageListener = (message: any) => {
       if (message.type === 'FORM_FILL_STARTED') {
         setIsFillingForm(true);
-      } else if (message.type === 'FORM_FILL_STOPPED' || message.type === 'FORM_FILL_COMPLETE') {
+      } else if (
+        message.type === 'FORM_FILL_STOPPED' ||
+        message.type === 'FORM_FILL_COMPLETE' ||
+        message.type === 'FORM_FILL_ERROR'
+      ) {
         setIsFillingForm(false);
       }
     };
@@ -28,13 +46,21 @@ export default function FormFillButton({ tabId, tabMeta, isDarkMode }: FeatureBu
   const handleClick = async () => {
     try {
       if (isFillingForm) {
-        // Stop filling
-        await chrome.tabs.sendMessage(tabId, { type: 'STOP_FORM_FILL' });
+        // Stop filling - use callback if provided, otherwise direct message
+        if (onStopFillForm) {
+          onStopFillForm();
+        } else {
+          await chrome.tabs.sendMessage(tabId, { type: 'STOP_FORM_FILL' });
+        }
         setIsFillingForm(false);
       } else {
-        // Start filling
-        await chrome.tabs.sendMessage(tabId, { type: 'START_FORM_FILL' });
-        setIsFillingForm(true);
+        // Start filling - use callback if provided, otherwise direct message
+        if (onFillForm) {
+          onFillForm();
+        } else {
+          await chrome.tabs.sendMessage(tabId, { type: 'START_FORM_FILL' });
+          setIsFillingForm(true);
+        }
       }
     } catch (error) {
       console.error('Failed to trigger form filler:', error);

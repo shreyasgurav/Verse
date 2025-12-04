@@ -134,7 +134,7 @@ const SidePanel = () => {
   const currentThinkingRef = useRef<ThinkingStep[]>([]);
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
-  const lastTaskSourceRef = useRef<'summarize' | 'agent' | null>(null);
+  const lastTaskSourceRef = useRef<'summarize' | 'form_fill' | 'agent' | null>(null);
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1242,6 +1242,90 @@ const SidePanel = () => {
       }
 
       // Handle different commands
+      if (command === '/fill_form') {
+        // Mark source so follow-ups don't try to reuse a non-existent executor
+        lastTaskSourceRef.current = 'form_fill';
+        // Ensure we have a session
+        const tabId = tabIdRef.current;
+        if (!tabId) throw new Error('Tab ID not initialized');
+        if (!tabChatHistoryStore) throw new Error('Chat history store not initialized');
+
+        if (!sessionIdRef.current) {
+          const newSession = await tabChatHistoryStore.createSession('Fill form');
+          setCurrentSessionId(newSession.id);
+          sessionIdRef.current = newSession.id;
+        }
+
+        // Append user-visible command message
+        appendMessage(
+          {
+            actor: Actors.USER,
+            content: 'Fill this form',
+            timestamp: Date.now(),
+          },
+          sessionIdRef.current,
+        );
+
+        // Add progress message (3 dots) immediately
+        setMessages(prev => [
+          ...prev,
+          {
+            actor: Actors.SYSTEM,
+            content: progressMessage,
+            timestamp: Date.now(),
+            messageType: 'progress',
+            taskId: sessionIdRef.current,
+          } as Message,
+        ]);
+
+        // Update UI state while filling form
+        setIsFollowUpMode(false);
+        setInputEnabled(false);
+        setShowStopButton(true);
+        setCurrentTaskState('thinking');
+
+        // Send message to content script to start form filling
+        try {
+          await chrome.tabs.sendMessage(tabId, {
+            type: 'START_FORM_FILL',
+            sessionId: sessionIdRef.current,
+          });
+        } catch (error) {
+          console.error('Failed to start form fill:', error);
+          // Remove progress message and show error
+          setMessages(prev => prev.filter(m => m.messageType !== 'progress'));
+          appendMessage({
+            actor: Actors.SYSTEM,
+            content: 'Failed to start form filling. Make sure you are on a page with a form.',
+            timestamp: Date.now(),
+          });
+          setInputEnabled(true);
+          setShowStopButton(false);
+          setCurrentTaskState('idle');
+        }
+        return true;
+      }
+
+      if (command === '/stop_form_fill') {
+        const tabId = tabIdRef.current;
+        if (tabId) {
+          try {
+            await chrome.tabs.sendMessage(tabId, { type: 'STOP_FORM_FILL' });
+          } catch (error) {
+            console.error('Failed to stop form fill:', error);
+          }
+        }
+        // Remove progress message - don't show stopped message here,
+        // it will be shown by the FORM_FILL_STOPPED listener
+        setMessages(prev => prev.filter(m => m.messageType !== 'progress'));
+        setInputEnabled(true);
+        setShowStopButton(false);
+        setCurrentTaskState('idle');
+        setIsFollowUpMode(false);
+        lastTaskSourceRef.current = 'form_fill';
+        return true;
+      }
+
       if (command === '/summarize_page') {
         // Mark source so follow-ups don't try to reuse a non-existent executor
         lastTaskSourceRef.current = 'summarize';
@@ -1736,9 +1820,10 @@ const SidePanel = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Listen for summarize_complete messages from background (runtime channel)
+  // Listen for summarize_complete and form_fill messages from background/content scripts
   useEffect(() => {
     const handleRuntimeMessage = (message: any) => {
+      // Handle summarize completion
       if (message && message.type === 'summarize_complete' && message.sessionId) {
         console.log('📨 Received summarize_complete signal, reloading session');
         // Reload the session to show the summary
@@ -1751,11 +1836,82 @@ const SidePanel = () => {
         setIsFollowUpMode(false);
         lastTaskSourceRef.current = 'summarize';
       }
+
+      // Handle form fill started
+      if (message && message.type === 'FORM_FILL_STARTED') {
+        console.log('📨 Form fill started');
+        // UI already showing progress from /fill_form command
+      }
+
+      // Handle form fill completion
+      if (message && message.type === 'FORM_FILL_COMPLETE') {
+        console.log('📨 Form fill completed');
+        // Remove progress message and show success
+        setMessages(prev => prev.filter(m => m.messageType !== 'progress'));
+        appendMessage({
+          actor: Actors.SYSTEM,
+          content: 'Form has been filled successfully! ✓',
+          timestamp: Date.now(),
+        });
+        // Reset UI state
+        setShowStopButton(false);
+        setInputEnabled(true);
+        setCurrentTaskState('idle');
+        setIsFollowUpMode(false);
+        lastTaskSourceRef.current = 'form_fill';
+      }
+
+      // Handle form fill stopped - only show message once
+      if (message && message.type === 'FORM_FILL_STOPPED') {
+        console.log('📨 Form fill stopped');
+        // Remove progress message and show stopped message (only once)
+        setMessages(prev => {
+          // Check if we already have a stopped message to avoid duplicates
+          const hasStoppedMessage = prev.some(
+            m => m.content === 'Form filling was stopped.' && Date.now() - m.timestamp < 2000,
+          );
+          if (hasStoppedMessage) {
+            return prev.filter(m => m.messageType !== 'progress');
+          }
+          return [
+            ...prev.filter(m => m.messageType !== 'progress'),
+            {
+              actor: Actors.SYSTEM,
+              content: 'Form filling was stopped.',
+              timestamp: Date.now(),
+            } as Message,
+          ];
+        });
+        // Reset UI state
+        setShowStopButton(false);
+        setInputEnabled(true);
+        setCurrentTaskState('idle');
+        setIsFollowUpMode(false);
+        lastTaskSourceRef.current = 'form_fill';
+      }
+
+      // Handle form fill error
+      if (message && message.type === 'FORM_FILL_ERROR') {
+        console.log('📨 Form fill error:', message.error);
+        // Remove progress message and show error
+        setMessages(prev => prev.filter(m => m.messageType !== 'progress'));
+        appendMessage({
+          actor: Actors.SYSTEM,
+          content: `Form filling failed: ${message.error || 'Unknown error'}`,
+          timestamp: Date.now(),
+        });
+        // Reset UI state
+        setShowStopButton(false);
+        setInputEnabled(true);
+        setCurrentTaskState('idle');
+        setIsFollowUpMode(false);
+        lastTaskSourceRef.current = 'form_fill';
+      }
     };
 
     chrome.runtime.onMessage.addListener(handleRuntimeMessage);
     return () => chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
-  }, [reloadCurrentSession]);
+  }, [reloadCurrentSession, appendMessage]);
 
   return (
     <div>
@@ -1916,6 +2072,8 @@ const SidePanel = () => {
                   replayEnabled={replayEnabled}
                   onReplay={handleReplay}
                   currentTabId={tabIdRef.current}
+                  onFillForm={() => handleSendMessage('/fill_form', 'Fill this form')}
+                  onStopFillForm={() => handleCommand('/stop_form_fill')}
                 />
               </>
             )}

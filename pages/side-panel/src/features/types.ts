@@ -14,6 +14,8 @@ export interface FeatureButtonProps {
   tabId: number;
   tabMeta: TabMeta;
   isDarkMode: boolean;
+  onFillForm?: () => void;
+  onStopFillForm?: () => void;
 }
 
 export interface SidePanelFeature {

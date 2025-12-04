@@ -22,6 +22,8 @@ interface InputProps {
   replayEnabled: boolean;
   onReplay: (historicalSessionId: string) => void;
   currentTabId?: number | null;
+  onFillForm?: () => void;
+  onStopFillForm?: () => void;
 }
 
 export default function InputSection({
@@ -38,6 +40,8 @@ export default function InputSection({
   replayEnabled,
   onReplay,
   currentTabId,
+  onFillForm,
+  onStopFillForm,
 }: InputProps) {
   const url = currentTabMeta?.url || '';
   const isInternalUrl =
@@ -71,7 +75,13 @@ export default function InputSection({
               <span className="tab-chip-title">{currentTabMeta?.title || 'This page'}</span>
             </div>
             {FeatureButton && currentTabId && currentTabMeta && !isInternalUrl && (
-              <FeatureButton tabId={currentTabId} tabMeta={currentTabMeta} isDarkMode={isDarkMode} />
+              <FeatureButton
+                tabId={currentTabId}
+                tabMeta={currentTabMeta}
+                isDarkMode={isDarkMode}
+                onFillForm={onFillForm}
+                onStopFillForm={onStopFillForm}
+              />
             )}
           </div>
         </div>
