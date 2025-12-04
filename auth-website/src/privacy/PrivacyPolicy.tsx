@@ -3,14 +3,24 @@ import './PrivacyPolicy.css';
 const PrivacyPolicy = () => {
   return (
     <div className="privacy-policy">
-      <div className="container">
-        <header className="header">
-          <h1>Privacy Policy</h1>
-          <p className="subtitle">Verse - AI Web Automation Extension</p>
-          <p className="last-updated">Last updated: {new Date().toISOString().slice(0, 10)}</p>
-        </header>
+      {/* Match Landing header */}
+      <header className="header">
+        <div className="container">
+          <div className="header-content">
+            <div className="logo">
+              <img src="/verse-logo.png" alt="Verse" />
+            </div>
+            <div className="nav">
+              <span style={{ fontSize: 16, color: '#1d1d1f', fontWeight: 600 }}>Privacy Policy</span>
+            </div>
+          </div>
+        </div>
+      </header>
 
-        <main className="content">
+      {/* Page content */}
+      <div className="container">
+        <main className="content" style={{ paddingTop: '96px' }}>
+          <p className="last-updated">Last updated: {new Date().toISOString().slice(0, 10)}</p>
           <section className="section">
             <h2>1. Information We Collect</h2>
             <p>
