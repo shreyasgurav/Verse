@@ -16,6 +16,7 @@ export interface FeatureButtonProps {
   isDarkMode: boolean;
   onFillForm?: () => void;
   onStopFillForm?: () => void;
+  disabled?: boolean;
 }
 
 export interface SidePanelFeature {

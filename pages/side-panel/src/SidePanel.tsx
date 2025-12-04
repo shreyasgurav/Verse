@@ -135,6 +135,7 @@ const SidePanel = () => {
   const sessionIdRef = useRef<string | null>(null);
   const isReplayingRef = useRef<boolean>(false);
   const lastTaskSourceRef = useRef<'summarize' | 'form_fill' | 'agent' | null>(null);
+  const summarizeCancelledRef = useRef<boolean>(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -993,11 +994,16 @@ const SidePanel = () => {
               setCurrentThinking([...currentThinkingRef.current]);
             }
           } else {
-            // Executor is not running - ensure UI shows idle state
-            console.log('⏹️ Executor is not running, UI should be idle');
-            setShowStopButton(false);
-            setInputEnabled(true);
-            setCurrentTaskState('idle');
+            // Executor is not running
+            // Do NOT flip UI to idle if a non-executor task (summarize/form_fill) is active
+            if (lastTaskSourceRef.current === 'summarize' || lastTaskSourceRef.current === 'form_fill') {
+              console.log('⏹️ Executor idle, but summarize/form_fill in progress → keep UI locked');
+            } else {
+              console.log('⏹️ Executor is not running, UI should be idle');
+              setShowStopButton(false);
+              setInputEnabled(true);
+              setCurrentTaskState('idle');
+            }
           }
         } else if (message && message.type === 'error') {
           // Handle error messages from service worker
@@ -1618,25 +1624,42 @@ const SidePanel = () => {
       setShowStopButton(false);
       stopConnection();
     }
-  };
-
-  const handleStopTask = async () => {
-    try {
-      portRef.current?.postMessage({
-        type: 'cancel_task',
-        tabId: tabIdRef.current,
-      });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error('cancel_task error', errorMessage);
-      appendMessage({
-        actor: Actors.SYSTEM,
-        content: errorMessage,
-        timestamp: Date.now(),
-      });
-    }
     setInputEnabled(true);
     setShowStopButton(false);
+  };
+
+  // Stop button in the input: stop the currently active task source
+  const handleStopTask = async () => {
+    try {
+      if (lastTaskSourceRef.current === 'form_fill') {
+        await handleCommand('/stop_form_fill');
+        return;
+      }
+
+      if (lastTaskSourceRef.current === 'summarize') {
+        // No background cancel available; stop UI and ignore completion when it arrives
+        summarizeCancelledRef.current = true;
+        setMessages(prev => prev.filter(m => m.messageType !== 'progress'));
+        appendMessage({
+          actor: Actors.SYSTEM,
+          content: 'Summarization stopped.',
+          timestamp: Date.now(),
+        });
+        setInputEnabled(true);
+        setShowStopButton(false);
+        setCurrentTaskState('idle');
+        setIsFollowUpMode(false);
+        return;
+      }
+
+      // Default: cancel agent executor task
+      portRef.current?.postMessage({ type: 'cancel_task' });
+      setInputEnabled(true);
+      setShowStopButton(false);
+      setCurrentTaskState('idle');
+    } catch (error) {
+      console.error('Failed to stop task:', error);
+    }
   };
 
   const handleNewChat = () => {
@@ -1825,7 +1848,19 @@ const SidePanel = () => {
     const handleRuntimeMessage = (message: any) => {
       // Handle summarize completion
       if (message && message.type === 'summarize_complete' && message.sessionId) {
-        console.log('📨 Received summarize_complete signal, reloading session');
+        console.log('📨 Received summarize_complete signal');
+        if (summarizeCancelledRef.current) {
+          // User stopped; ignore completion and clear the flag
+          console.log('Summarize completion ignored due to user stop');
+          summarizeCancelledRef.current = false;
+          setShowStopButton(false);
+          setInputEnabled(true);
+          setCurrentTaskState('idle');
+          setIsFollowUpMode(false);
+          return;
+        }
+
+        console.log('Reloading session to show the summary');
         // Reload the session to show the summary
         reloadCurrentSession();
         // Reset UI state
@@ -1840,7 +1875,10 @@ const SidePanel = () => {
       // Handle form fill started
       if (message && message.type === 'FORM_FILL_STARTED') {
         console.log('📨 Form fill started');
-        // UI already showing progress from /fill_form command
+        // Ensure input is blocked and stop button is visible
+        setInputEnabled(false);
+        setShowStopButton(true);
+        setCurrentTaskState('thinking');
       }
 
       // Handle form fill completion
@@ -1943,15 +1981,20 @@ const SidePanel = () => {
                 <div className="relative group">
                   <button
                     type="button"
-                    onClick={() => handleSendMessage('/summarize_page', 'Summarize page')}
+                    onClick={() => {
+                      if (!inputEnabled || showStopButton || isHistoricalSession) return;
+                      handleSendMessage('/summarize_page', 'Summarize page');
+                    }}
                     onKeyDown={e => {
                       if (e.key === 'Enter') {
+                        if (!inputEnabled || showStopButton || isHistoricalSession) return;
                         handleSendMessage('/summarize_page', 'Summarize page');
                       }
                     }}
-                    className={`header-icon text-white hover:text-white cursor-pointer`}
+                    className={`header-icon text-white hover:text-white ${!inputEnabled || showStopButton || isHistoricalSession ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     aria-label={'Summarize page'}
-                    tabIndex={0}>
+                    tabIndex={0}
+                    disabled={!inputEnabled || showStopButton || isHistoricalSession}>
                     <span
                       className="material-symbols-outlined"
                       style={{ fontSize: 24, lineHeight: 1, position: 'relative', top: 2 }}>

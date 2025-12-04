@@ -81,6 +81,8 @@ export default function InputSection({
                 isDarkMode={isDarkMode}
                 onFillForm={onFillForm}
                 onStopFillForm={onStopFillForm}
+                // Disable starting actions whenever a task is active or input is disabled
+                disabled={!inputEnabled || showStopButton || isHistoricalSession}
               />
             )}
           </div>

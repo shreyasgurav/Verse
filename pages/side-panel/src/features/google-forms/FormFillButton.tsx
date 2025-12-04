@@ -19,6 +19,7 @@ export default function FormFillButton({
   isDarkMode,
   onFillForm,
   onStopFillForm,
+  disabled,
 }: FormFillButtonExtendedProps) {
   const [isFillingForm, setIsFillingForm] = useState(false);
 
@@ -55,6 +56,8 @@ export default function FormFillButton({
         setIsFillingForm(false);
       } else {
         // Start filling - use callback if provided, otherwise direct message
+        // Honor disabled state to prevent starting while another task is running
+        if (disabled) return;
         if (onFillForm) {
           onFillForm();
         } else {
@@ -72,6 +75,9 @@ export default function FormFillButton({
     <button
       type="button"
       onClick={handleClick}
+      className="feature-btn"
+      // Disable only when attempting to start; allow stop when isFillingForm is true
+      disabled={!!disabled && !isFillingForm}
       style={{
         background: 'none',
         border: 'none',
