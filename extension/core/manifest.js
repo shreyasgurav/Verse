@@ -102,9 +102,10 @@ const manifest = withOperaSidebar(
         description: 'Activate the extension',
         suggested_key: {
           mac: 'Command+I',
-          windows: 'Ctrl+I'
-        }
-      }
+          windows: 'Ctrl+I',
+          linux: 'Ctrl+I',
+        },
+      },
     },
   }),
 );
