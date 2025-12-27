@@ -18,7 +18,6 @@ export default function LandingPage({}: LandingPageProps) {
     const video = videoRef.current;
     if (!video) return;
 
-    // Set video properties
     video.muted = true;
     video.loop = true;
 
@@ -26,7 +25,6 @@ export default function LandingPage({}: LandingPageProps) {
       entries => {
         entries.forEach(entry => {
           if (entry.isIntersecting) {
-            // Video is in viewport - reset to start and play
             video.currentTime = 0;
             const playPromise = video.play();
             if (playPromise !== undefined) {
@@ -35,14 +33,13 @@ export default function LandingPage({}: LandingPageProps) {
               });
             }
           } else {
-            // Video is out of viewport - pause and reset to start
             video.pause();
             video.currentTime = 0;
           }
         });
       },
       {
-        threshold: 0.3, // Trigger when 30% of video is visible
+        threshold: 0.3,
         rootMargin: '0px',
       },
     );
@@ -54,28 +51,22 @@ export default function LandingPage({}: LandingPageProps) {
     };
   }, []);
 
-  // Intersection Observer for scroll animations
   useEffect(() => {
     const heroTitleElement = heroTitleRef.current;
     const videoSectionElement = videoSectionRef.current;
 
-    // Hero title should animate immediately on load since it's at the top
     if (heroTitleElement) {
-      // Small delay to ensure smooth animation
       setTimeout(() => {
         setIsHeroTitleVisible(true);
 
-        // Video appears after title animation completes (800ms delay)
         setTimeout(() => {
           if (videoSectionElement) {
-            // Check if video section is already in viewport
             const rect = videoSectionElement.getBoundingClientRect();
             const isInViewport = rect.top < window.innerHeight && rect.bottom > 0;
 
             if (isInViewport) {
               setIsVideoVisible(true);
             } else {
-              // If not in viewport yet, wait for scroll
               const observerOptions = {
                 threshold: 0.2,
                 rootMargin: '0px 0px -50px 0px',
@@ -100,7 +91,6 @@ export default function LandingPage({}: LandingPageProps) {
         }, 800);
       }, 100);
     } else {
-      // Fallback: if title element not found, set up video observer normally
       if (videoSectionElement) {
         const observerOptions = {
           threshold: 0.2,
@@ -162,15 +152,15 @@ export default function LandingPage({}: LandingPageProps) {
             <div className="hero-content">
               <div ref={heroTitleRef} className={`hero-title-wrapper ${isHeroTitleVisible ? 'animate-in' : ''}`}>
                 <h1 id="hero-title" className="hero-title">
-                  <span className="hero-title-line">Automate anything</span>
-                  <span className="hero-title-line">on the web.</span>
+                  <span className="hero-title-line">AI-powered browser</span>
+                  <span className="hero-title-line">automation for Chrome</span>
                 </h1>
               </div>
               <div className="hero-subtitle-wrapper">
                 <p className="hero-subtitle">
-                  Verse is an AI-powered browser automation extension that turns Chrome into an intelligent automation
-                  engine. Describe tasks in plain English—like data extraction, form filling, or research—and watch
-                  Verse execute them automatically.
+                  Verse is an AI-powered browser automation extension that lets you automate websites using plain
+                  English. Describe tasks like data extraction, form filling, research, or navigating complex web apps,
+                  and Verse executes them directly in your browser using a multi-agent AI system.
                 </p>
               </div>
               <div className="hero-cta">
@@ -179,7 +169,7 @@ export default function LandingPage({}: LandingPageProps) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-download">
-                  Download for Chrome — Free
+                  Download for Chrome - Free
                 </a>
               </div>
             </div>
@@ -210,6 +200,31 @@ export default function LandingPage({}: LandingPageProps) {
           </div>
         </section>
 
+        {/* Best For / Not For Section */}
+        <section className="best-for-section" aria-labelledby="best-for-title">
+          <div className="container">
+            <div className="best-for-grid">
+              <div className="best-for-card best-for">
+                <h3>Best for</h3>
+                <ul>
+                  <li>Data extraction and scraping</li>
+                  <li>Repetitive form filling</li>
+                  <li>Web research and comparison</li>
+                  <li>Navigating dashboards and admin panels</li>
+                </ul>
+              </div>
+              <div className="best-for-card not-for">
+                <h3>Not designed for</h3>
+                <ul>
+                  <li>Backend automation</li>
+                  <li>Server-side workflows</li>
+                  <li>Full robotic process automation (RPA)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Use Cases */}
         <section className="use-cases" aria-labelledby="use-cases-title">
           <div className="container">
@@ -221,8 +236,8 @@ export default function LandingPage({}: LandingPageProps) {
               <article className="use-case-card">
                 <h3>Data extraction</h3>
                 <p>
-                  Extract structured data from websites automatically. Pull product listings, contact information,
-                  pricing tables, and more from multiple pages into formats you can use.
+                  Extract structured data from websites automatically using AI-powered browser automation. Pull product
+                  listings, contact information, pricing tables, and more from multiple pages.
                 </p>
               </article>
               <article className="use-case-card">
@@ -235,15 +250,15 @@ export default function LandingPage({}: LandingPageProps) {
               <article className="use-case-card">
                 <h3>Research tasks</h3>
                 <p>
-                  Automate research across multiple websites. Navigate documentation, compare products, gather
-                  information, and compile findings systematically.
+                  Automate web research across multiple sites. Verse navigates pages, compares information, and
+                  summarizes results so you can focus on analysis.
                 </p>
               </article>
               <article className="use-case-card">
                 <h3>Navigate complex tools</h3>
                 <p>
                   Move through dashboards, admin panels, and professional software with AI guidance. No technical
-                  expertise needed—just describe what you want to accomplish.
+                  expertise needed. Just describe what you want to accomplish.
                 </p>
               </article>
             </div>
@@ -319,10 +334,10 @@ export default function LandingPage({}: LandingPageProps) {
                 </button>
                 <div className={openFaq === 0 ? 'faq-answer open' : 'faq-answer'}>
                   <p>
-                    Verse is an AI-powered browser automation extension that turns Chrome into an intelligent automation
-                    engine. Simply describe what you need in plain English, and Verse's multi-agent system will plan and
-                    execute the task automatically. It's designed for data extraction, form filling, research, and
-                    navigating complex web tools.
+                    Verse is an AI-powered browser automation extension that lets you automate websites using plain
+                    English. Describe what you need, and Verse's multi-agent system will plan and execute the task
+                    automatically. It's designed for data extraction, form filling, research, and navigating complex web
+                    tools.
                   </p>
                 </div>
               </div>
@@ -368,10 +383,9 @@ export default function LandingPage({}: LandingPageProps) {
                 </button>
                 <div className={openFaq === 2 ? 'faq-answer open' : 'faq-answer'}>
                   <p>
-                    Yes, Verse is completely free to use with no subscriptions or hidden fees. You'll need to provide
-                    your own API keys for the LLM provider you choose (OpenAI, Anthropic, Gemini, or local models via
-                    Ollama). Verse runs entirely in your browser, so you have full control over your AI backend and
-                    costs.
+                    Yes, Verse is completely free to use with no subscriptions or hidden fees. You provide your own API
+                    keys for the LLM provider you choose (OpenAI, Anthropic, Gemini, or local models via Ollama). Verse
+                    runs entirely in your browser, so you have full control over your AI backend and costs.
                   </p>
                 </div>
               </div>
@@ -395,7 +409,7 @@ export default function LandingPage({}: LandingPageProps) {
                   <p>
                     Absolutely. Verse runs 100% locally in your browser, meaning all automation happens on your machine.
                     Your data never leaves your computer unless you explicitly send it to an LLM provider (which you
-                    control). We don't run servers, collect data, or track your usage.
+                    control). We do not run servers, collect data, or track your usage.
                   </p>
                 </div>
               </div>
@@ -442,8 +456,56 @@ export default function LandingPage({}: LandingPageProps) {
                 <div className={openFaq === 5 ? 'faq-answer open' : 'faq-answer'}>
                   <p>
                     Getting started takes about 2 minutes: download the extension from the Chrome Web Store, configure
-                    your preferred LLM provider with your API keys in the settings, and you're ready to go. Open the
+                    your preferred LLM provider with your API keys in the settings, and you are ready to go. Open the
                     side panel and describe what you want to automate in plain English.
+                  </p>
+                </div>
+              </div>
+
+              <div className="faq-item">
+                <button className="faq-question" onClick={() => toggleFaq(6)} aria-expanded={openFaq === 6}>
+                  <span>Is Verse a robotic process automation (RPA) tool?</span>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className={openFaq === 6 ? 'faq-icon open' : 'faq-icon'}
+                    aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                <div className={openFaq === 6 ? 'faq-answer open' : 'faq-answer'}>
+                  <p>
+                    No. Verse is a browser automation extension designed for interactive web workflows. It does not
+                    replace backend RPA systems or enterprise automation platforms. Verse focuses on automating tasks
+                    you would normally do manually in your browser.
+                  </p>
+                </div>
+              </div>
+
+              <div className="faq-item">
+                <button className="faq-question" onClick={() => toggleFaq(7)} aria-expanded={openFaq === 7}>
+                  <span>How is Verse different from Zapier or no-code automation tools?</span>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className={openFaq === 7 ? 'faq-icon open' : 'faq-icon'}
+                    aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                <div className={openFaq === 7 ? 'faq-answer open' : 'faq-answer'}>
+                  <p>
+                    Zapier connects APIs and backend services. Verse automates actions directly on websites through the
+                    browser, making it suitable for tasks that APIs do not support. If you need to interact with a
+                    website the way a human would, Verse is the right tool.
                   </p>
                 </div>
               </div>
@@ -463,7 +525,7 @@ export default function LandingPage({}: LandingPageProps) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-download">
-                  Download for Chrome — Free
+                  Download for Chrome - Free
                 </a>
               </div>
             </div>

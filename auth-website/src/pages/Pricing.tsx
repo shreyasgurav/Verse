@@ -38,7 +38,9 @@ export default function Pricing() {
         <div className="container">
           <article className="content-section">
             <h1 className="page-title">Simple, Transparent Pricing</h1>
-            <p className="page-subtitle">Verse is free to use. You only pay for the AI provider you choose.</p>
+            <p className="page-subtitle">
+              Verse is a free AI-powered browser automation extension. You only pay for the AI model you choose to use.
+            </p>
 
             {/* Pricing Cards */}
             <section className="pricing-grid">
@@ -112,12 +114,31 @@ export default function Pricing() {
               </div>
             </section>
 
+            {/* Pricing Positioning */}
+            <section className="text-section highlight-section">
+              <p>
+                Because Verse runs locally in your browser and does not operate servers, there are no subscriptions or
+                platform fees. This makes Verse one of the most cost-effective AI browser automation tools available.
+              </p>
+            </section>
+
+            {/* Who Pricing is Best For */}
+            <section className="text-section">
+              <h2>Who Verse Pricing is Best For</h2>
+              <ul className="feature-list">
+                <li>Individuals and freelancers</li>
+                <li>Students and researchers</li>
+                <li>Startups and growth teams</li>
+                <li>Privacy-conscious users</li>
+              </ul>
+            </section>
+
             {/* AI Provider Costs Section */}
             <section className="text-section">
               <h2>AI Provider Costs</h2>
               <p>
                 Verse uses AI models to understand and execute your tasks. You bring your own API keys, so you pay the
-                AI provider directly based on usage. Here's what typical tasks cost:
+                AI provider directly based on usage. Here is what typical tasks cost:
               </p>
 
               <div className="cost-examples">
@@ -147,7 +168,7 @@ export default function Pricing() {
             {/* Provider Comparison */}
             <section className="text-section">
               <h2>Choose Your AI Provider</h2>
-              <p>Verse works with your preferred AI provider. Here's a quick comparison:</p>
+              <p>Verse works with your preferred AI provider. Here is a quick comparison:</p>
               <table className="comparison-table">
                 <thead>
                   <tr>
@@ -234,7 +255,7 @@ export default function Pricing() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-download">
-                Download for Chrome — Free
+                Download for Chrome - Free
               </a>
             </section>
           </article>

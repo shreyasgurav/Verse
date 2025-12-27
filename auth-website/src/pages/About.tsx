@@ -37,23 +37,31 @@ export default function About() {
       <main className="page-content">
         <div className="container">
           <article className="content-section">
-            <h1 className="page-title">About Verse</h1>
+            <h1 className="page-title">About Verse - AI Browser Automation</h1>
 
             <section className="text-section">
               <h2>What is Verse?</h2>
               <p>
-                <strong>
-                  Verse is an AI-powered browser automation extension that transforms Chrome into an intelligent
-                  automation engine.
-                </strong>
-                Unlike traditional automation tools that require complex scripts or recording, Verse uses natural
-                language understanding to execute tasks based on plain English descriptions.
+                Verse is an AI-powered browser automation extension that allows users to automate websites using natural
+                language. Instead of writing scripts or recording macros, users describe what they want to do, and
+                Verse's AI agents plan and execute the task directly in the browser.
               </p>
               <p>
                 Verse is designed for product managers, growth teams, marketers, researchers, and anyone who spends
-                significant time on repetitive web tasks. Simply describe what you need—whether it's extracting data
-                from multiple pages, filling out forms, conducting research, or navigating complex web applications—and
-                Verse handles the rest.
+                significant time on repetitive web tasks. Whether you need to extract data from multiple pages, fill out
+                forms, conduct research, or navigate complex web applications, Verse handles it automatically.
+              </p>
+            </section>
+
+            <section className="text-section highlight-section">
+              <h2>Why Verse Exists</h2>
+              <p>
+                Most browser automation tools are fragile, complex, or require technical expertise. Scripts break when
+                websites change. Recordings become outdated. Learning automation frameworks takes weeks.
+              </p>
+              <p>
+                Verse was built to make automation accessible to anyone by letting AI handle planning, decision-making,
+                and execution. You focus on what you want to accomplish. Verse figures out how to do it.
               </p>
             </section>
 
@@ -77,8 +85,8 @@ export default function About() {
                 </li>
               </ul>
               <p>
-                This architecture allows Verse to handle complex, multi-step tasks that would take hours
-                manually—completing them in minutes with consistent accuracy.
+                This architecture allows Verse to handle complex, multi-step tasks that would take hours manually,
+                completing them in minutes with consistent accuracy.
               </p>
             </section>
 
@@ -102,7 +110,7 @@ export default function About() {
                   <strong>E-commerce Operators:</strong> Monitor pricing and product availability
                 </li>
                 <li>
-                  <strong>Anyone:</strong> Who's tired of repetitive clicking and copying
+                  <strong>Anyone:</strong> Who is tired of repetitive clicking and copying
                 </li>
               </ul>
             </section>
@@ -111,7 +119,7 @@ export default function About() {
               <h2>Our Approach to Privacy</h2>
               <p>
                 <strong>Verse runs entirely in your browser.</strong> All automation happens locally on your machine.
-                Your data never touches our servers—we don't collect, store, or transmit any personal information.
+                Your data never touches our servers. We do not collect, store, or transmit any personal information.
               </p>
               <p>
                 You bring your own API keys for the AI model of your choice (OpenAI, Anthropic Claude, Google Gemini, or
@@ -124,7 +132,7 @@ export default function About() {
               <p>
                 Verse supports multiple LLM providers, giving you the flexibility to choose the AI that works best for
                 your needs and budget. Whether you prefer the latest GPT models, Claude's nuanced understanding,
-                Gemini's speed, or privacy-focused local models—Verse works with them all.
+                Gemini's speed, or privacy-focused local models, Verse works with them all.
               </p>
             </section>
 
@@ -136,7 +144,7 @@ export default function About() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-download">
-                Download for Chrome — Free
+                Download for Chrome - Free
               </a>
             </section>
           </article>

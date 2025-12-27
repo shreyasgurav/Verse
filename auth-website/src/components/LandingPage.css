@@ -508,6 +508,82 @@
   color: #6e6e73;
 }
 
+/* Best For / Not For Section */
+.best-for-section {
+  padding: 40px 0 80px;
+}
+
+.best-for-section .container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.best-for-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.best-for-card {
+  padding: 32px;
+  border-radius: 16px;
+}
+
+.best-for-card.best-for {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.best-for-card.not-for {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.best-for-card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin: 0 0 16px;
+}
+
+.best-for-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.best-for-card li {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #1d1d1f;
+  padding: 6px 0;
+  padding-left: 24px;
+  position: relative;
+}
+
+.best-for-card.best-for li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.best-for-card.not-for li::before {
+  content: "✕";
+  position: absolute;
+  left: 0;
+  color: #dc2626;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .best-for-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Use Cases */
 .use-cases {
   padding: 80px 0;

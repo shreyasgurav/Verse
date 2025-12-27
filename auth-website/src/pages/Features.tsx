@@ -37,11 +37,20 @@ export default function Features() {
       <main className="page-content">
         <div className="container">
           <article className="content-section">
-            <h1 className="page-title">Verse Features</h1>
+            <h1 className="page-title">AI Browser Automation Features</h1>
             <p className="page-subtitle">
-              Everything you need to automate web tasks with AI. Verse combines intelligent planning, precise execution,
-              and natural language understanding.
+              Verse is an AI-powered browser automation extension that combines natural language understanding,
+              multi-agent planning, and local execution to automate real-world web tasks.
             </p>
+
+            {/* Category Clarification */}
+            <section className="text-section highlight-section">
+              <p>
+                <strong>Unlike traditional automation tools</strong>, Verse operates entirely inside your browser and
+                uses AI to understand intent instead of relying on scripts, recordings, or brittle selectors. You
+                describe what you want in plain English, and Verse figures out how to do it.
+              </p>
+            </section>
 
             {/* Core Features Grid */}
             <section className="features-grid-page">
@@ -97,8 +106,8 @@ export default function Features() {
                 </div>
                 <h3>Data Extraction</h3>
                 <p>
-                  Extract structured data from websites—product listings, contact information, pricing tables, and more.
-                  Export to formats you can use immediately.
+                  Extract structured data from websites: product listings, contact information, pricing tables, and
+                  more. Export to formats you can use immediately.
                 </p>
               </div>
 
@@ -126,7 +135,7 @@ export default function Features() {
                 <h3>Complex Tool Navigation</h3>
                 <p>
                   Navigate dashboards, admin panels, and professional software with AI guidance. No technical expertise
-                  needed—just describe what you want to accomplish.
+                  needed. Just describe what you want to accomplish.
                 </p>
               </div>
             </section>
@@ -162,7 +171,7 @@ export default function Features() {
             <section className="text-section highlight-section">
               <h2>Privacy-First Architecture</h2>
               <p>
-                <strong>Verse runs 100% locally in your browser.</strong> We don't run servers that process your data.
+                <strong>Verse runs 100% locally in your browser.</strong> We do not run servers that process your data.
                 Your browsing activity, form data, and automation tasks never touch our infrastructure.
               </p>
               <ul className="feature-list">
@@ -176,6 +185,10 @@ export default function Features() {
             {/* Comparison Section */}
             <section className="text-section">
               <h2>How Verse Compares</h2>
+              <p>
+                Verse is often compared to traditional RPA tools, browser macros, and automation scripts, but it works
+                fundamentally differently.
+              </p>
               <p>
                 Unlike traditional automation tools that require coding, recording, or complex setup, Verse uses AI to
                 understand your intent and execute intelligently:
@@ -192,7 +205,7 @@ export default function Features() {
                 <tbody>
                   <tr>
                     <td>Setup Required</td>
-                    <td className="highlight">None—just describe</td>
+                    <td className="highlight">None, just describe</td>
                     <td>Complex scripting</td>
                     <td>Recording needed</td>
                   </tr>
@@ -226,7 +239,7 @@ export default function Features() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-download">
-                Download for Chrome — Free
+                Download for Chrome - Free
               </a>
             </section>
           </article>
