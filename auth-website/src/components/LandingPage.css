@@ -510,11 +510,11 @@
 
 /* Best For / Not For Section */
 .best-for-section {
-  padding: 40px 0 80px;
+  padding: 80px 0;
 }
 
 .best-for-section .container {
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 20px;
 }
@@ -522,29 +522,27 @@
 .best-for-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
+  gap: 32px;
 }
 
 .best-for-card {
-  padding: 32px;
+  padding: 36px 32px;
+  background: #f5f5f7;
   border-radius: 16px;
+  transition: all 0.3s ease;
 }
 
-.best-for-card.best-for {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-}
-
-.best-for-card.not-for {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+.best-for-card:hover {
+  background: #e8e8ed;
 }
 
 .best-for-card h3 {
-  font-size: 18px;
+  font-size: 28px;
   font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.003em;
   color: #1d1d1f;
-  margin: 0 0 16px;
+  margin-bottom: 10px;
 }
 
 .best-for-card ul {
@@ -554,34 +552,12 @@
 }
 
 .best-for-card li {
-  font-size: 15px;
-  line-height: 1.6;
-  color: #1d1d1f;
+  font-size: 17px;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: #6e6e73;
   padding: 6px 0;
-  padding-left: 24px;
-  position: relative;
-}
-
-.best-for-card.best-for li::before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: #16a34a;
-  font-weight: 600;
-}
-
-.best-for-card.not-for li::before {
-  content: "✕";
-  position: absolute;
-  left: 0;
-  color: #dc2626;
-  font-weight: 600;
-}
-
-@media (max-width: 640px) {
-  .best-for-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Use Cases */
@@ -955,7 +931,8 @@
 
   .step-card h3,
   .feature-card h3,
-  .use-case-card h3 {
+  .use-case-card h3,
+  .best-for-card h3 {
     font-size: 22px;
     line-height: 1.2;
     letter-spacing: -0.008em;
@@ -1015,7 +992,8 @@
 
   .step-card h3,
   .feature-card h3,
-  .use-case-card h3 {
+  .use-case-card h3,
+  .best-for-card h3 {
     font-size: 22px;
     line-height: 1.2;
     letter-spacing: -0.008em;
@@ -1058,6 +1036,29 @@
 
   .section-header p {
     font-size: 17px;
+  }
+
+  .best-for-section {
+    padding: 60px 0;
+  }
+
+  .best-for-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+
+  .best-for-card {
+    padding: 32px 24px;
+  }
+
+  .best-for-card h3 {
+    font-size: 22px;
+    line-height: 1.2;
+    letter-spacing: -0.008em;
+  }
+
+  .best-for-card li {
+    font-size: 15px;
   }
 
   .how-it-works,
@@ -1180,8 +1181,28 @@
     line-height: 1.4;
   }
 
+  .best-for-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .best-for-card {
+    padding: 24px 16px;
+  }
+
+  .best-for-card h3 {
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+
+  .best-for-card li {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
   .feature-card,
-  .use-case-card {
+  .use-case-card,
+  .best-for-card {
     border-radius: 12px;
   }
 }
