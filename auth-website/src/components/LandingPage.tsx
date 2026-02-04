@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Analytics from '../utils/analytics';
 
 interface LandingPageProps {}
 
@@ -52,6 +53,9 @@ export default function LandingPage({}: LandingPageProps) {
   }, []);
 
   useEffect(() => {
+    // Track page view
+    Analytics.trackPageView('Landing Page', 'Verse - AI-Powered Browser Automation Extension');
+
     const heroTitleElement = heroTitleRef.current;
     const videoSectionElement = videoSectionRef.current;
 
@@ -137,7 +141,20 @@ export default function LandingPage({}: LandingPageProps) {
                 href="https://chromewebstore.google.com/detail/verse-agentic-browser/eilgeegkhgchcfhekepmojbocceamoee"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-download-header">
+                className="btn-download-header"
+                onClick={() => {
+                  Analytics.trackButtonClick('Get for Chrome', 'header', {
+                    button_type: 'cta',
+                    button_category: 'download',
+                    placement: 'header_navigation',
+                    target_url: 'chrome_web_store',
+                  });
+                  Analytics.trackCTAPerformance('Header Download CTA', 'click', 'header');
+                }}
+                onMouseEnter={() => {
+                  Analytics.trackButtonHover('Get for Chrome', 'header');
+                  Analytics.trackCTAPerformance('Header Download CTA', 'hover', 'header');
+                }}>
                 Get for Chrome
               </a>
             </nav>
@@ -168,7 +185,22 @@ export default function LandingPage({}: LandingPageProps) {
                   href="https://chromewebstore.google.com/detail/verse-agentic-browser/eilgeegkhgchcfhekepmojbocceamoee"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-download">
+                  className="btn-download"
+                  onClick={() => {
+                    Analytics.trackButtonClick('Download for Chrome - Free', 'hero', {
+                      button_type: 'primary_cta',
+                      button_category: 'download',
+                      placement: 'hero_section',
+                      target_url: 'chrome_web_store',
+                      button_size: 'large',
+                      conversion_goal: 'extension_install',
+                    });
+                    Analytics.trackCTAPerformance('Hero Primary CTA', 'click', 'hero');
+                  }}
+                  onMouseEnter={() => {
+                    Analytics.trackButtonHover('Download for Chrome - Free', 'hero');
+                    Analytics.trackCTAPerformance('Hero Primary CTA', 'hover', 'hero');
+                  }}>
                   Download for Chrome - Free
                 </a>
               </div>
@@ -303,7 +335,23 @@ export default function LandingPage({}: LandingPageProps) {
               </article>
             </div>
             <div className="features-cta">
-              <a href="/features" className="btn-secondary-link">
+              <a
+                href="/features"
+                className="btn-secondary-link"
+                onClick={() => {
+                  Analytics.trackButtonClick('See all features', 'features-section', {
+                    button_type: 'secondary_cta',
+                    button_category: 'navigation',
+                    placement: 'features_highlight',
+                    target_page: 'features',
+                    conversion_goal: 'feature_exploration',
+                  });
+                  Analytics.trackCTAPerformance('Features Exploration CTA', 'click', 'features-section');
+                }}
+                onMouseEnter={() => {
+                  Analytics.trackButtonHover('See all features', 'features-section');
+                  Analytics.trackCTAPerformance('Features Exploration CTA', 'hover', 'features-section');
+                }}>
                 See all features →
               </a>
             </div>
@@ -524,7 +572,23 @@ export default function LandingPage({}: LandingPageProps) {
                   href="https://chromewebstore.google.com/detail/verse-agentic-browser/eilgeegkhgchcfhekepmojbocceamoee"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-download">
+                  className="btn-download"
+                  onClick={() => {
+                    Analytics.trackButtonClick('Download for Chrome - Free', 'cta-section', {
+                      button_type: 'final_cta',
+                      button_category: 'download',
+                      placement: 'bottom_cta_section',
+                      target_url: 'chrome_web_store',
+                      button_size: 'large',
+                      conversion_goal: 'extension_install',
+                      page_position: 'bottom',
+                    });
+                    Analytics.trackCTAPerformance('Final CTA', 'click', 'cta-section');
+                  }}
+                  onMouseEnter={() => {
+                    Analytics.trackButtonHover('Download for Chrome - Free', 'cta-section');
+                    Analytics.trackCTAPerformance('Final CTA', 'hover', 'cta-section');
+                  }}>
                   Download for Chrome - Free
                 </a>
               </div>

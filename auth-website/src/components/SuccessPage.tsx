@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Analytics from '../utils/analytics';
 
 interface SuccessPageProps {
   authData: { userId: string; email: string; name: string; idToken?: string };
@@ -12,6 +13,9 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
   const [showSignOut, setShowSignOut] = useState(false);
 
   useEffect(() => {
+    // Track success page view
+    Analytics.trackPageView('/auth/success', 'Authentication Success - Verse');
+
     // Get extension ID from storage (try localStorage first, then sessionStorage) or redirect URL
     let extensionId = localStorage.getItem('verse_extension_id') || sessionStorage.getItem('verse_extension_id');
     if (!extensionId && redirectUrl && redirectUrl.startsWith('chrome-extension://')) {
@@ -31,15 +35,18 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
           (response?: unknown) => {
             if (chrome.runtime.lastError) {
               console.log('Extension message error:', chrome.runtime.lastError.message);
+              Analytics.trackExtensionMessage('VERSE_AUTH_SUCCESS', false);
               setMessage('Authentication successful! Please return to Verse and open the side panel.');
             } else {
               console.log('Message sent to extension:', response);
+              Analytics.trackExtensionMessage('VERSE_AUTH_SUCCESS', true);
               setMessage('Opening Verse side panel...');
             }
           },
         );
       } catch (error) {
         console.error('Error sending message to extension:', error);
+        Analytics.trackExtensionMessage('VERSE_AUTH_SUCCESS', false);
         setMessage('Authentication successful! Please return to Verse and open the side panel.');
       }
     } else {
@@ -57,6 +64,7 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
         if (prev <= 1) {
           clearInterval(timer);
           // Close the tab after countdown
+          Analytics.trackRedirect('tab_close');
           window.close();
           // If window.close() doesn't work, show a message and sign out button
           setTimeout(() => {
@@ -147,7 +155,10 @@ export default function SuccessPage({ authData, redirectUrl, onSignOut }: Succes
         )}
         {showSignOut && onSignOut && (
           <button
-            onClick={onSignOut}
+            onClick={() => {
+              Analytics.trackButtonClick('Sign Out', 'success-page');
+              onSignOut();
+            }}
             style={{
               marginTop: '16px',
               padding: '12px 32px',
